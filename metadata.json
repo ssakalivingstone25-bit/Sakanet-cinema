@@ -1,0 +1,6 @@
+{
+  "name": "Sakanet Cinema & Offline Streaming",
+  "description": "Premium red and black cinema streaming platform with chunk-based offline downloads, interactive user ratings, and movie management portal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

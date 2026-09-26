@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with authentication and subscription details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "Google user email address" },
+        "displayName": { "type": "string", "description": "User display name from Google account" },
+        "photoURL": { "type": "string", "description": "User Google profile avatar photo" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User role" },
+        "tier": { "type": "string", "enum": ["Free", "Premium VIP"], "description": "Account subscription tier" },
+        "download_quota_used_mb": { "type": "number", "description": "Megabytes downloaded" },
+        "download_quota_limit_mb": { "type": "number", "description": "Quota limit in megabytes" },
+        "watchlist": { "type": "array", "description": "Array of saved movie IDs" },
+        "createdAt": { "type": "string", "description": "Account registration ISO timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update ISO timestamp" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Movie": {
+      "title": "Movie",
+      "description": "Cinema master video catalog item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Movie ID" },
+        "title": { "type": "string", "description": "Movie title" },
+        "synopsis": { "type": "string", "description": "Plot synopsis" },
+        "genre": { "type": "string", "description": "Primary genre" },
+        "secondary_genre": { "type": "string", "description": "Secondary subgenre" },
+        "release_year": { "type": "number", "description": "Release year" },
+        "duration_minutes": { "type": "number", "description": "Duration in minutes" },
+        "director": { "type": "string", "description": "Director name" },
+        "cast": { "type": "array", "description": "List of primary cast members" },
+        "file_url": { "type": "string", "description": "Video stream source URL" },
+        "thumbnail_url": { "type": "string", "description": "Poster thumbnail image URL" },
+        "banner_url": { "type": "string", "description": "Wide hero banner image URL" },
+        "download_permission": { "type": "string", "enum": ["free", "premium", "vip"], "description": "Required tier" },
+        "file_size_mb": { "type": "number", "description": "File size in MB" },
+        "is_active": { "type": "boolean", "description": "Whether visible on platform live feed" },
+        "is_featured": { "type": "boolean", "description": "Whether featured in hero spotlight" },
+        "rating": { "type": "number", "description": "Average review rating" },
+        "review_count": { "type": "number", "description": "Number of reviews" },
+        "video_qualities": { "type": "array", "description": "Available stream resolutions" },
+        "audio_tracks": { "type": "array", "description": "Available audio channels" },
+        "subtitles": { "type": "array", "description": "Available subtitle tracks" },
+        "created_at": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "title", "file_url", "is_active"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "User review and rating for a movie",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Review unique ID" },
+        "movie_id": { "type": "string", "description": "Associated movie ID" },
+        "user_id": { "type": "string", "description": "User Auth UID" },
+        "user_name": { "type": "string", "description": "User display name" },
+        "user_avatar": { "type": "string", "description": "User avatar photo URL" },
+        "rating": { "type": "number", "description": "Rating score 1 to 5" },
+        "comment": { "type": "string", "description": "Review comment" },
+        "created_at": { "type": "string", "description": "Review timestamp" }
+      },
+      "required": ["id", "movie_id", "user_id", "rating"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User account document keyed by Firebase Auth UID"
+    },
+    "/movies/{movieId}": {
+      "schema": "Movie",
+      "description": "Published movie catalog document"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "User movie review"
+    }
+  }
+}
