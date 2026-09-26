@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { Movie, DownloadPermission } from '../types';
 import { storageService } from '../services/storageService';
+import { mediaDB } from '../services/mediaDB';
 import {
   saveMovieToFirestore,
   deleteMovieFromFirestore,
@@ -161,6 +162,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
       });
 
       // Create new movie in "Awaiting Publication" state
+      const finalPoster = pendingPosterDataUrl || thumbnailDataUrl;
       const newMovie = storageService.addMovie({
         title: fileNameClean,
         synopsis: 'Awaiting administrator plot description and synopsis.',
@@ -171,8 +173,8 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
         director: 'Livingstone Saka',
         cast: ['Lead Performer', 'Supporting Cast'],
         file_url: objectUrl,
-        thumbnail_url: pendingPosterDataUrl || thumbnailDataUrl,
-        banner_url: pendingPosterDataUrl || thumbnailDataUrl,
+        thumbnail_url: finalPoster,
+        banner_url: finalPoster,
         download_permission: 'free',
         file_size_mb: fileSizeMb,
         is_active: false, // In Awaiting Publication
@@ -181,6 +183,12 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
         audio_tracks: ['English [Dolby Atmos 5.1]'],
         subtitles: ['English [CC]'],
       });
+
+      // Persist the actual binary video file into IndexedDB so it stays playable permanently
+      await mediaDB.saveVideoBlob(newMovie.id, file);
+
+      // Reset pending custom poster
+      setPendingPosterDataUrl(null);
 
       saveMovieToFirestore(newMovie);
       onMoviesChanged();
@@ -342,6 +350,9 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
 
     // Delete locally
     storageService.deleteMultipleMovies(movieIds);
+
+    // Clean up binary media blobs from IndexedDB
+    movieIds.forEach((id) => mediaDB.deleteMedia(id));
 
     // Delete in Firestore
     deleteMultipleMoviesFromFirestore(movieIds);
@@ -984,14 +995,47 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">Poster Thumbnail URL</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-zinc-400 font-medium">Cover Art / Poster Image</label>
+                    <label className="cursor-pointer flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300 font-semibold bg-red-950/40 px-2 py-0.5 rounded border border-red-800/40">
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>Upload Cover from Device</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (evt) => {
+                              const dataUrl = evt.target?.result as string;
+                              setFormPosterUrl(dataUrl);
+                              showToast('Cover image attached from device!');
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
                   <input
-                    type="url"
-                    value={formPosterUrl}
+                    type="text"
+                    value={formPosterUrl.startsWith('data:') ? 'Attached from Device (Image File)' : formPosterUrl}
                     onChange={(e) => setFormPosterUrl(e.target.value)}
-                    placeholder="https://.../poster.jpg"
+                    placeholder="Upload from device or enter image URL"
                     className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white font-mono text-[11px] focus:outline-none focus:border-red-500"
                   />
+                  {formPosterUrl && (
+                    <div className="mt-2 flex items-center gap-3 p-2 bg-zinc-900/60 rounded-xl border border-white/5">
+                      <img
+                        src={formPosterUrl}
+                        alt="Poster preview"
+                        className="w-12 h-16 object-cover rounded-lg border border-white/10"
+                      />
+                      <span className="text-[11px] text-zinc-400">Attached Poster Preview</span>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize2, X } from 'lucide-react';
 import { Movie } from '../types';
 import { storageService } from '../services/storageService';
+import { mediaDB } from '../services/mediaDB';
 
 interface MiniPlayerProps {
   movie: Movie;
@@ -12,16 +13,7 @@ interface MiniPlayerProps {
   onProgressUpdated?: () => void;
 }
 
-const getFallbackStream = (m: Movie) => {
-  const genre = (m.genre || '').toLowerCase();
-  if (genre.includes('sci-fi') || genre.includes('action') || genre.includes('thriller')) {
-    return 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
-  }
-  if (genre.includes('drama') || genre.includes('adventure') || genre.includes('crime')) {
-    return 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4';
-  }
-  return 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-};
+const FALLBACK_STREAM = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
 
 export const MiniPlayer: React.FC<MiniPlayerProps> = ({
   movie,
@@ -32,13 +24,7 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
   onProgressUpdated,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const fallbackStream = getFallbackStream(movie);
-  const [currentStreamUrl, setCurrentStreamUrl] = useState<string>(() => {
-    if (movie.file_url && !movie.file_url.startsWith('blob:')) {
-      return movie.file_url;
-    }
-    return movie.file_url || fallbackStream;
-  });
+  const [currentStreamUrl, setCurrentStreamUrl] = useState<string>('');
 
   const [isPlaying, setIsPlaying] = useState<boolean>(initialIsPlaying);
   const [currentTime, setCurrentTime] = useState<number>(initialTime);
@@ -47,13 +33,33 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
   const [showControls, setShowControls] = useState<boolean>(false);
 
   useEffect(() => {
-    if (videoRef.current) {
+    let cancelled = false;
+    async function resolveSource() {
+      const dbUrl = await mediaDB.getVideoBlobUrl(movie.id);
+      if (dbUrl && !cancelled) {
+        setCurrentStreamUrl(dbUrl);
+        return;
+      }
+      if (movie.file_url && !movie.file_url.startsWith('blob:')) {
+        if (!cancelled) setCurrentStreamUrl(movie.file_url);
+        return;
+      }
+      if (!cancelled) setCurrentStreamUrl(FALLBACK_STREAM);
+    }
+    resolveSource();
+    return () => {
+      cancelled = true;
+    };
+  }, [movie]);
+
+  useEffect(() => {
+    if (videoRef.current && currentStreamUrl) {
       videoRef.current.currentTime = initialTime;
       if (initialIsPlaying) {
         videoRef.current.play().catch(() => setIsPlaying(false));
       }
     }
-  }, []);
+  }, [currentStreamUrl]);
 
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -64,7 +70,11 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
-      storageService.saveWatchProgress(movie.id, videoRef.current.currentTime, videoRef.current.duration || movie.duration_minutes * 60);
+      storageService.saveWatchProgress(
+        movie.id,
+        videoRef.current.currentTime,
+        videoRef.current.duration || movie.duration_minutes * 60
+      );
       onProgressUpdated?.();
     }
   };
@@ -80,14 +90,22 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
     if (!videoRef.current) return;
     const cur = videoRef.current.currentTime;
     setCurrentTime(cur);
-    storageService.saveWatchProgress(movie.id, cur, videoRef.current.duration || movie.duration_minutes * 60);
+    storageService.saveWatchProgress(
+      movie.id,
+      cur,
+      videoRef.current.duration || movie.duration_minutes * 60
+    );
     onProgressUpdated?.();
   };
 
   const handleClose = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (videoRef.current) {
-      storageService.saveWatchProgress(movie.id, videoRef.current.currentTime, videoRef.current.duration || movie.duration_minutes * 60);
+      storageService.saveWatchProgress(
+        movie.id,
+        videoRef.current.currentTime,
+        videoRef.current.duration || movie.duration_minutes * 60
+      );
       onProgressUpdated?.();
     }
     onClose();
@@ -103,30 +121,31 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
       className="fixed bottom-5 right-5 z-50 w-72 sm:w-88 aspect-video bg-black rounded-xl overflow-hidden border border-red-600/40 shadow-2xl shadow-black/90 cursor-pointer group select-none transition-all duration-200 hover:border-red-500 hover:scale-[1.02]"
     >
       {/* Video Element */}
-      <video
-        ref={videoRef}
-        key={currentStreamUrl}
-        playsInline
-        onTimeUpdate={handleTimeUpdate}
-        onError={() => {
-          if (currentStreamUrl !== fallbackStream) {
-            setCurrentStreamUrl(fallbackStream);
-          }
-        }}
-        onLoadedMetadata={() => {
-          if (videoRef.current) {
-            setDuration(videoRef.current.duration);
-            videoRef.current.currentTime = initialTime;
-            if (initialIsPlaying) {
-              videoRef.current.play().catch(() => {});
+      {currentStreamUrl && (
+        <video
+          ref={videoRef}
+          key={currentStreamUrl}
+          src={currentStreamUrl}
+          playsInline
+          autoPlay={initialIsPlaying}
+          onTimeUpdate={handleTimeUpdate}
+          onError={() => {
+            if (currentStreamUrl !== FALLBACK_STREAM) {
+              setCurrentStreamUrl(FALLBACK_STREAM);
             }
-          }
-        }}
-        className="w-full h-full object-cover"
-      >
-        {currentStreamUrl && <source src={currentStreamUrl} type="video/mp4" />}
-        {currentStreamUrl !== fallbackStream && <source src={fallbackStream} type="video/mp4" />}
-      </video>
+          }}
+          onLoadedMetadata={() => {
+            if (videoRef.current) {
+              setDuration(videoRef.current.duration);
+              videoRef.current.currentTime = initialTime;
+              if (initialIsPlaying) {
+                videoRef.current.play().catch(() => {});
+              }
+            }
+          }}
+          className="w-full h-full object-cover"
+        />
+      )}
 
       {/* Floating Header Scrim with Title & Close */}
       <div
@@ -151,7 +170,7 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
           </button>
           <button
             onClick={handleClose}
-            title="Close Mini-Player"
+            title="Close Mini Player"
             className="p-1 rounded bg-black/60 hover:bg-red-600 text-white transition-colors"
           >
             <X className="w-3.5 h-3.5" />
@@ -159,41 +178,38 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
         </div>
       </div>
 
-      {/* Center Controls (Visible on hover or when paused) */}
+      {/* Center Play Indicator */}
       <div
-        className={`absolute inset-0 flex items-center justify-center bg-black/30 transition-opacity ${
-          showControls || !isPlaying ? 'opacity-100' : 'opacity-0'
+        className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity ${
+          showControls ? 'opacity-100' : 'opacity-0'
         }`}
       >
         <button
           onClick={togglePlay}
-          className="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+          className="p-3 rounded-full bg-black/60 hover:bg-red-600 text-white border border-white/20 shadow-xl pointer-events-auto transition-transform hover:scale-110 active:scale-95"
         >
-          {isPlaying ? (
-            <Pause className="w-4 h-4 fill-current" />
-          ) : (
-            <Play className="w-4 h-4 fill-current ml-0.5" />
-          )}
+          {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
         </button>
       </div>
 
-      {/* Bottom Bar: Mute and Progress */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2">
-        <div className="flex items-center justify-between text-[10px] text-zinc-300 mb-1">
+      {/* Bottom Bar: Seek bar and mute */}
+      <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/90 to-transparent flex flex-col gap-1">
+        <div className="flex items-center justify-between text-[10px] text-zinc-300 px-1">
+          <span className="font-mono">Mini Player</span>
           <button
             onClick={toggleMute}
-            className="text-zinc-300 hover:text-white transition-colors"
+            className="text-zinc-300 hover:text-white p-0.5"
+            title={isMuted ? 'Unmute' : 'Mute'}
           >
             {isMuted ? <VolumeX className="w-3.5 h-3.5 text-red-500" /> : <Volume2 className="w-3.5 h-3.5" />}
           </button>
-          <span className="font-mono text-zinc-400">Picture-in-Picture</span>
         </div>
 
-        {/* Progress Line */}
-        <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+        {/* Mini progress line */}
+        <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden">
           <div
             className="h-full bg-red-600 rounded-full transition-all"
-            style={{ width: `${progressPercent}%` }}
+            style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
           />
         </div>
       </div>
