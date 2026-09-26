@@ -21,14 +21,13 @@ env:
   REGISTRY_HOSTNAME: us.icr.io
   IMAGE_NAME: iks-test
   IKS_CLUSTER: example-iks-cluster-name-or-id
-  DEPLOYMENT_NAME: iks-test
-  PORT: 5001
+  DEPLOYMENT_NAME: sakanet-cinema
+  PORT: 80
 
 jobs:
   setup-build-publish-deploy:
     name: Setup, Build, Publish, and Deploy
-    runs-on: ubuntu-latest
-    environment: production
+    runs-on: ubuntu-24.04
     steps:
 
     - name: Checkout
