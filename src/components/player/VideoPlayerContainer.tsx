@@ -17,6 +17,7 @@ interface VideoPlayerContainerProps {
 }
 
 const FALLBACK_STREAM = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
+const SECONDARY_STREAM = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
 
 export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   movie,
@@ -29,10 +30,16 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Stream source state
-  const [resolvedStreamUrl, setResolvedStreamUrl] = useState<string>('');
+  // Initialize with immediate stream source to prevent "no supported sources"
+  const [resolvedStreamUrl, setResolvedStreamUrl] = useState<string>(() => {
+    if (movie?.file_url && !movie.file_url.startsWith('blob:')) {
+      return movie.file_url;
+    }
+    return FALLBACK_STREAM;
+  });
+
   const [isResolvingStream, setIsResolvingStream] = useState<boolean>(true);
-  const [isBuffering, setIsBuffering] = useState<boolean>(true);
+  const [isBuffering, setIsBuffering] = useState<boolean>(false);
   const [streamError, setStreamError] = useState<string | null>(null);
 
   // Playback state
@@ -89,7 +96,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
         if (movie.file_url) {
           // If blob URL that became revoked or expired, fallback gracefully
           if (movie.file_url.startsWith('blob:')) {
-            // Test if blob is still valid
             try {
               const res = await fetch(movie.file_url, { method: 'HEAD' });
               if (res.ok && !isCancelled) {
@@ -151,7 +157,10 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
-      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+      videoRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => {});
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
@@ -389,10 +398,12 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
 
   const handleVideoError = () => {
     console.warn('Video failed to play resolved source:', resolvedStreamUrl);
-    // If not already on fallback stream, gracefully recover
-    if (resolvedStreamUrl !== FALLBACK_STREAM) {
+    // If not already on secondary stream, switch to reliable fallback
+    if (resolvedStreamUrl !== FALLBACK_STREAM && resolvedStreamUrl !== SECONDARY_STREAM) {
       setResolvedStreamUrl(FALLBACK_STREAM);
-      setIsBuffering(true);
+      setStreamError(null);
+    } else if (resolvedStreamUrl === FALLBACK_STREAM) {
+      setResolvedStreamUrl(SECONDARY_STREAM);
       setStreamError(null);
     } else {
       setIsBuffering(false);
@@ -419,10 +430,12 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
         }`}
       >
         {/* Underlying Video Element */}
-        {!isResolvingStream && resolvedStreamUrl && (
+        {resolvedStreamUrl ? (
           <VideoElement
+            key={resolvedStreamUrl}
             ref={videoRef}
             streamUrl={resolvedStreamUrl}
+            fallbackStreamUrl={FALLBACK_STREAM}
             posterUrl={movie.banner_url || movie.thumbnail_url}
             playbackSpeed={playbackSpeed}
             volume={volume}
@@ -438,7 +451,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
               onProgressUpdated?.();
             }}
           />
-        )}
+        ) : null}
 
         {/* Buffering Loading Spinner Overlay */}
         {(isResolvingStream || isBuffering) && !streamError && (
