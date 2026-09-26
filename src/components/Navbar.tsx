@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { UserProfile, DownloadItem } from '../types';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface NavbarProps {
   activeTab: 'feed' | 'browse' | 'downloads' | 'admin';
@@ -177,6 +178,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               </>
             )}
           </button>
+
+          {/* PWA In-App Install Prompt */}
+          <PWAInstallButton variant="navbar" />
 
           {/* Android App vs Web View Mode Toggle */}
           <button

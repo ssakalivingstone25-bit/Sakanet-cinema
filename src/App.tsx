@@ -13,6 +13,7 @@ import { OfflineDownloadsView } from './components/OfflineDownloadsView';
 import { AdminPortalView } from './components/AdminPortalView';
 import { BrowseCatalogView } from './components/BrowseCatalogView';
 import { AndroidAppFrame } from './components/AndroidAppFrame';
+import { PWAInstallButton } from './components/PWAInstallButton';
 import { GoogleAuthModal } from './components/GoogleAuthModal';
 import { AuthGateScreen } from './components/AuthGateScreen';
 import {
@@ -310,6 +311,11 @@ export default function App() {
               </div>
             ) : (
               <>
+                {/* Mobile PWA Installation Feature Banner */}
+                <div className="px-4 md:px-12 pt-4">
+                  <PWAInstallButton variant="banner" />
+                </div>
+
                 {/* Hero Spotlight */}
                 {featuredMovie && (
                   <HeroBanner
