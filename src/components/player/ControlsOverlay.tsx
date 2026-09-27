@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Volume2, Volume1, VolumeX, Play, Pause, Maximize, Minimize, MoreVertical, X } from 'lucide-react';
 import { VideoPlayerState } from '../../types';
 
 interface ControlsOverlayProps {
@@ -36,7 +37,20 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   movieTitle,
   onClose,
 }) => {
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const [isVolumeHovered, setIsVolumeHovered] = useState(false);
+
+  const effectiveVolume = state.isMuted ? 0 : state.volume;
+
+  // Render appropriate speaker icon depending on volume level and mute state
+  const renderVolumeIcon = () => {
+    if (state.isMuted || effectiveVolume === 0) {
+      return <VolumeX className="w-5 h-5 text-red-400 group-hover/vol:text-red-300" />;
+    }
+    if (effectiveVolume < 0.5) {
+      return <Volume1 className="w-5 h-5 text-[#a1a1aa] group-hover/vol:text-white" />;
+    }
+    return <Volume2 className="w-5 h-5 text-[#a1a1aa] group-hover/vol:text-white" />;
+  };
 
   return (
     <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
@@ -48,10 +62,9 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               onClick={onClose}
               className="p-1.5 rounded-full bg-black/60 hover:bg-white/20 text-white transition-colors cursor-pointer"
               title="Close"
+              aria-label="Close player"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-5 h-5" />
             </button>
           )}
           {movieTitle && (
@@ -83,87 +96,82 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
         </div>
 
         <div className="flex items-center justify-between text-[#f4f4f5] text-sm">
-          <div className="flex items-center gap-4">
-            {/* Main Action Trigger */}
+          <div className="flex items-center gap-3 sm:gap-4">
+            {/* Main Play/Pause Button */}
             <button
               onClick={onPlayPause}
-              className="text-[#e4e4e7] hover:text-white transform hover:scale-105 transition-all outline-none cursor-pointer"
+              className="text-[#e4e4e7] hover:text-white transform hover:scale-105 transition-all outline-none cursor-pointer flex items-center justify-center p-1 rounded-md hover:bg-white/10"
               title={state.isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+              aria-label={state.isPlaying ? 'Pause' : 'Play'}
             >
               {state.isPlaying ? (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                </svg>
+                <Pause className="w-5 h-5 fill-current" />
               ) : (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
+                <Play className="w-5 h-5 fill-current" />
               )}
             </button>
 
-            {/* Volume Quick Control */}
+            {/* Volume Control: Speaker Icon Button + Volume Slider */}
             {onVolumeChange && (
               <div
-                className="relative flex items-center gap-1.5"
-                onMouseEnter={() => setShowVolumeSlider(true)}
-                onMouseLeave={() => setShowVolumeSlider(false)}
+                className="group/vol relative flex items-center gap-2"
+                onMouseEnter={() => setIsVolumeHovered(true)}
+                onMouseLeave={() => setIsVolumeHovered(false)}
               >
+                {/* Speaker Mute/Unmute Button */}
                 <button
                   onClick={onToggleMute}
-                  className="text-[#a1a1aa] hover:text-white transition-colors cursor-pointer"
+                  className="p-1 rounded-md text-[#a1a1aa] hover:text-white hover:bg-white/10 transition-colors cursor-pointer flex items-center justify-center"
                   title={state.isMuted ? 'Unmute (M)' : 'Mute (M)'}
+                  aria-label={state.isMuted ? 'Unmute' : 'Mute'}
                 >
-                  {state.isMuted || state.volume === 0 ? (
-                    <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                    </svg>
-                  )}
+                  {renderVolumeIcon()}
                 </button>
+
+                {/* Always-interactive volume slider that expands on hover or remains accessible */}
                 <div
-                  className={`transition-all duration-200 overflow-hidden flex items-center ${
-                    showVolumeSlider ? 'w-20 opacity-100' : 'w-0 opacity-0'
+                  className={`flex items-center transition-all duration-200 ease-out overflow-hidden ${
+                    isVolumeHovered ? 'w-20 sm:w-24 opacity-100' : 'w-16 sm:w-20 opacity-80 group-hover/vol:opacity-100'
                   }`}
                 >
                   <input
                     type="range"
                     min="0"
                     max="1"
-                    step="0.05"
-                    value={state.isMuted ? 0 : state.volume}
+                    step="0.02"
+                    value={effectiveVolume}
                     onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-                    className="w-full accent-[#3b82f6] h-1 bg-[#27272a] rounded cursor-pointer"
+                    aria-label="Volume slider"
+                    className="w-full accent-[#3b82f6] h-1.5 bg-[#27272a] rounded-lg cursor-pointer appearance-none outline-none"
+                    style={{
+                      background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${
+                        effectiveVolume * 100
+                      }%, #27272a ${effectiveVolume * 100}%, #27272a 100%)`,
+                    }}
                   />
                 </div>
               </div>
             )}
 
             {/* Code Duration Numbers Tracker */}
-            <span className="font-mono text-xs font-medium tracking-wider text-[#a1a1aa] select-none">
+            <span className="font-mono text-xs font-medium tracking-wider text-[#a1a1aa] select-none ml-1">
               <span className="text-[#f4f4f5]">{formatTime(state.currentTime)}</span> / {formatTime(state.duration)}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             {/* Fullscreen Toggle */}
             {onToggleFullscreen && (
               <button
                 onClick={onToggleFullscreen}
                 className="p-1.5 text-[#a1a1aa] hover:text-white hover:bg-[#27272a] rounded-md transition-all outline-none cursor-pointer"
                 title={state.isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+                aria-label={state.isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
               >
                 {state.isFullscreen ? (
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5M15 9l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5M15 15l5 5m0 0l-5 0m5 0l0-5" />
-                  </svg>
+                  <Minimize className="w-5 h-5" />
                 ) : (
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                  </svg>
+                  <Maximize className="w-5 h-5" />
                 )}
               </button>
             )}
@@ -173,14 +181,9 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               onClick={onOpenMenu}
               className="p-1.5 text-[#a1a1aa] hover:text-white hover:bg-[#27272a] rounded-md transition-all outline-none cursor-pointer"
               title="Settings"
+              aria-label="Settings"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                />
-              </svg>
+              <MoreVertical className="w-5 h-5" />
             </button>
           </div>
         </div>
