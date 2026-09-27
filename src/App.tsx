@@ -12,6 +12,7 @@ import { MiniPlayer } from './components/MiniPlayer';
 import { OfflineDownloadsView } from './components/OfflineDownloadsView';
 import { AdminPortalView } from './components/AdminPortalView';
 import { BrowseCatalogView } from './components/BrowseCatalogView';
+import { SettingsView } from './components/SettingsView';
 import { AndroidAppFrame } from './components/AndroidAppFrame';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { GoogleAuthModal } from './components/GoogleAuthModal';
@@ -38,7 +39,7 @@ export default function App() {
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [user, setUser] = useState<UserProfile>(storageService.getUser());
   const [isOfflineMode, setIsOfflineMode] = useState<boolean>(storageService.isOfflineMode());
-  const [activeTab, setActiveTab] = useState<'feed' | 'browse' | 'downloads' | 'admin'>('feed');
+  const [activeTab, setActiveTab] = useState<'settings' | 'browse' | 'downloads' | 'admin'>('browse');
   const [isAndroidView, setIsAndroidView] = useState<boolean>(false);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
@@ -283,148 +284,19 @@ export default function App() {
           </div>
         )}
 
-        {/* FEED TAB */}
-        {activeTab === 'feed' && (
-          <div className="space-y-4 pb-16">
-            {/* If no movies uploaded and published yet */}
-            {liveFeedMovies.length === 0 ? (
-              <div className="max-w-xl mx-auto my-20 p-8 bg-[#121216] border border-white/10 rounded-2xl text-center space-y-4 shadow-2xl">
-                <div className="w-14 h-14 rounded-full bg-red-950/60 border border-red-800/40 flex items-center justify-center text-red-500 mx-auto">
-                  <Film className="w-7 h-7" />
-                </div>
-                <h3 className="text-xl font-bold font-display text-white">
-                  Welcome to Sakanet Cinema
-                </h3>
-                <p className="text-xs text-zinc-400 leading-relaxed max-w-md mx-auto">
-                  No movies have been published to the live platform yet. Only movies uploaded and published
-                  by the admin appear on the feed. Use the Admin Portal to upload movies.
-                </p>
-                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-                  <button
-                    onClick={() => setActiveTab('admin')}
-                    className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs px-5 py-2.5 rounded-lg shadow-lg shadow-red-700/30 transition-all hover:scale-105"
-                  >
-                    <PlusCircle className="w-4 h-4" />
-                    <span>Open Admin Portal to Publish</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Mobile PWA Installation Feature Banner */}
-                <div className="px-4 md:px-12 pt-4">
-                  <PWAInstallButton variant="banner" />
-                </div>
-
-                {/* Hero Spotlight */}
-                {featuredMovie && (
-                  <HeroBanner
-                    movie={featuredMovie}
-                    onPlay={(m) => handlePlayMovie(m, 0, false)}
-                    onSelect={(m) => setSelectedMovie(m)}
-                    onDownload={handleDownloadMovie}
-                    onToggleWatchlist={handleToggleWatchlist}
-                    isInWatchlist={user.watchlist.includes(featuredMovie.id)}
-                    downloadItem={downloads.find((d) => d.movie_id === featuredMovie.id)}
-                  />
-                )}
-
-                {/* Continue Watching Rail (Tracks playback progress & allows exact resume) */}
-                {continueWatchingList.length > 0 && (
-                  <ContinueWatchingRail
-                    items={continueWatchingList}
-                    onResume={(m, resumeTime) => handlePlayMovie(m, resumeTime, false)}
-                    onRemoveProgress={handleRemoveWatchProgress}
-                    onSelectMovie={(m) => setSelectedMovie(m)}
-                  />
-                )}
-
-                {/* Watchlist Rail if user has saved movies */}
-                {watchlistMovies.length > 0 && (
-                  <MovieRail
-                    title="My Watchlist"
-                    subtitle="Saved to your Sakanet profile"
-                    movies={watchlistMovies}
-                    onSelectMovie={(m) => setSelectedMovie(m)}
-                    onPlayMovie={(m) => handlePlayMovie(m, 0, false)}
-                    onDownloadMovie={handleDownloadMovie}
-                    onToggleWatchlist={handleToggleWatchlist}
-                    watchlist={user.watchlist}
-                    downloads={downloads}
-                  />
-                )}
-
-                {/* Trending Now Rail */}
-                <MovieRail
-                  title="Trending Now"
-                  subtitle="Most streamed and downloaded this week"
-                  movies={liveFeedMovies}
-                  onSelectMovie={(m) => setSelectedMovie(m)}
-                  onPlayMovie={(m) => handlePlayMovie(m, 0, false)}
-                  onDownloadMovie={handleDownloadMovie}
-                  onToggleWatchlist={handleToggleWatchlist}
-                  watchlist={user.watchlist}
-                  downloads={downloads}
-                />
-
-                {/* Top Rated by 5-Star Metric */}
-                <MovieRail
-                  title="Top Rated Originals"
-                  subtitle="Ranked by audience 5-star review module"
-                  movies={topRatedMovies}
-                  onSelectMovie={(m) => setSelectedMovie(m)}
-                  onPlayMovie={(m) => handlePlayMovie(m, 0, false)}
-                  onDownloadMovie={handleDownloadMovie}
-                  onToggleWatchlist={handleToggleWatchlist}
-                  watchlist={user.watchlist}
-                  downloads={downloads}
-                />
-
-                {/* Dynamic Category Rails for every populated genre */}
-                {populatedGenres.map((genreName) => {
-                  const genreMovies = liveFeedMovies.filter(
-                    (m) =>
-                      m.genre.toLowerCase() === genreName.toLowerCase() ||
-                      m.secondary_genre?.toLowerCase().includes(genreName.toLowerCase())
-                  );
-                  if (genreMovies.length === 0) return null;
-                  return (
-                    <MovieRail
-                      key={genreName}
-                      title={genreName}
-                      subtitle={
-                        genreSubtitles[genreName] ||
-                        `Curated cinematic master releases in ${genreName}`
-                      }
-                      movies={genreMovies}
-                      onSelectMovie={(m) => setSelectedMovie(m)}
-                      onPlayMovie={(m) => handlePlayMovie(m, 0, false)}
-                      onDownloadMovie={handleDownloadMovie}
-                      onToggleWatchlist={handleToggleWatchlist}
-                      watchlist={user.watchlist}
-                      downloads={downloads}
-                    />
-                  );
-                })}
-
-                {/* Recently Added Releases */}
-                <MovieRail
-                  title="Recently Added Releases"
-                  subtitle="Fresh high-bitrate master uploads"
-                  movies={recentMovies}
-                  onSelectMovie={(m) => setSelectedMovie(m)}
-                  onPlayMovie={(m) => handlePlayMovie(m, 0, false)}
-                  onDownloadMovie={handleDownloadMovie}
-                  onToggleWatchlist={handleToggleWatchlist}
-                  watchlist={user.watchlist}
-                  downloads={downloads}
-                />
-              </>
-            )}
-          </div>
+        {/* SETTINGS TAB (Replaces former home/feed tab) */}
+        {activeTab === 'settings' && (
+          <SettingsView
+            user={user}
+            downloads={downloads}
+            isOfflineMode={isOfflineMode}
+            onToggleOfflineMode={handleToggleOfflineMode}
+            onOpenAuth={() => setShowAuthModal(true)}
+            onUserUpdated={() => refreshCatalog()}
+          />
         )}
 
-        {/* BROWSE & SEARCH TAB */}
+        {/* BROWSE & SEARCH TAB (Default Home Tab) */}
         {activeTab === 'browse' && (
           <BrowseCatalogView
             movies={movies}
@@ -436,6 +308,8 @@ export default function App() {
             downloads={downloads}
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
+            user={user}
+            onOpenAuth={() => setShowAuthModal(true)}
           />
         )}
 
@@ -500,10 +374,10 @@ export default function App() {
                   <span>{user.email ? 'Switch to Administrator Account' : 'Sign In with Google'}</span>
                 </button>
                 <button
-                  onClick={() => setActiveTab('feed')}
+                  onClick={() => setActiveTab('browse')}
                   className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold cursor-pointer"
                 >
-                  Return to Home Feed
+                  Return to Browse Catalog
                 </button>
               </div>
             </div>

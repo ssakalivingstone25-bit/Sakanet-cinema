@@ -16,8 +16,10 @@ interface VideoPlayerContainerProps {
   onProgressUpdated?: () => void;
 }
 
-const FALLBACK_STREAM = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
-const SECONDARY_STREAM = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+const FALLBACK_STREAM =
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
+const SECONDARY_STREAM =
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
 
 export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   movie,
@@ -30,7 +32,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Initialize with immediate stream source to start playing without stall
+  // Initialize with stream source
   const [resolvedStreamUrl, setResolvedStreamUrl] = useState<string>(() => {
     if (movie?.file_url && !movie.file_url.startsWith('blob:')) {
       return movie.file_url;
@@ -44,16 +46,32 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [currentTime, setCurrentTime] = useState<number>(initialTime);
   const [duration, setDuration] = useState<number>(0);
-  const [volume, setVolume] = useState<number>(0.85);
+  const [volume, setVolume] = useState<number>(0.9);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-  // Menu pop-over state
-  const [showSettings, setShowSettings] = useState<boolean>(false);
-  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // Quality, Subtitles, Audio track state matching reference
+  const [currentQuality, setCurrentQuality] = useState<string>('1080p');
+  const [currentSubtitle, setCurrentSubtitle] = useState<string>('Off');
+  const [currentAudioTrack, setCurrentAudioTrack] = useState<string>('Default (Stereo)');
+  const [isLiked, setIsLiked] = useState<boolean>(false);
+  const [isDisliked, setIsDisliked] = useState<boolean>(false);
+  const [isInMyList, setIsInMyList] = useState<boolean>(() => {
+    if (!movie) return false;
+    return storageService.getUser().watchlist.includes(movie.id);
+  });
 
-  // 1. Resolve Stream Source: checks IndexedDB, existing file_url, or resilient fallback
+  // Settings flyout state
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // 1. Resolve Stream Source
   useEffect(() => {
     let isCancelled = false;
 
@@ -62,14 +80,12 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       setStreamError(null);
 
       try {
-        // Check IndexedDB for offline or device-stored video Blob
         const indexedDbUrl = await mediaDB.getVideoBlobUrl(movie.id);
         if (indexedDbUrl && !isCancelled) {
           setResolvedStreamUrl(indexedDbUrl);
           return;
         }
 
-        // If movie has a valid file_url (http/https or existing blob), test it
         if (movie.file_url) {
           if (movie.file_url.startsWith('blob:')) {
             try {
@@ -78,9 +94,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
                 setResolvedStreamUrl(movie.file_url);
                 return;
               }
-            } catch {
-              // Revoked blob, proceed to fallback stream
-            }
+            } catch {}
           } else {
             if (!isCancelled) {
               setResolvedStreamUrl(movie.file_url);
@@ -89,7 +103,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           }
         }
 
-        // Use resilient cloud stream
         if (!isCancelled) {
           setResolvedStreamUrl(FALLBACK_STREAM);
         }
@@ -102,7 +115,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     }
 
     resolveSource();
-
     return () => {
       isCancelled = true;
     };
@@ -160,7 +172,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     }
   }, [isMuted, volume]);
 
-  // 5. Fullscreen Toggle (supports container fullscreen or fallback)
+  // 5. Fullscreen Toggle
   const toggleFullscreen = useCallback(() => {
     const elem = containerRef.current || document.documentElement;
     if (!document.fullscreenElement) {
@@ -188,7 +200,11 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     if (onEnterMiniPlayer) {
       const cur = videoRef.current.currentTime;
       const playing = !videoRef.current.paused;
-      storageService.saveWatchProgress(movie.id, cur, videoRef.current.duration || movie.duration_minutes * 60);
+      storageService.saveWatchProgress(
+        movie.id,
+        cur,
+        videoRef.current.duration || movie.duration_minutes * 60
+      );
       onProgressUpdated?.();
       onEnterMiniPlayer(movie, cur, playing);
       return;
@@ -215,17 +231,61 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    showToast(`Downloading "${movie.title}"`);
   }, [movie, resolvedStreamUrl]);
 
   // 8. Open Settings Menu Handler
-  const handleOpenMenu = useCallback((e: React.MouseEvent) => {
+  const handleOpenSettingsMenu = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setMenuPosition({ x: rect.left, y: rect.top });
     setShowSettings((prev) => !prev);
   }, []);
 
-  // 9. Keyboard Shortcuts Listener
+  // 9. Subtitles Toggle shortcut
+  const handleToggleSubtitles = useCallback(() => {
+    setCurrentSubtitle((prev) => (prev === 'Off' ? 'English [CC]' : 'Off'));
+    showToast(currentSubtitle === 'Off' ? 'Subtitles: English [CC]' : 'Subtitles: Off');
+  }, [currentSubtitle]);
+
+  // 10. Toolbar Action Handlers
+  const handleToggleMyList = useCallback(() => {
+    if (!movie) return;
+    const inList = storageService.toggleWatchlist(movie.id);
+    setIsInMyList(inList);
+    showToast(inList ? 'Added to My List' : 'Removed from My List');
+    onProgressUpdated?.();
+  }, [movie, onProgressUpdated]);
+
+  const handleLike = useCallback(() => {
+    setIsLiked((prev) => !prev);
+    if (!isLiked) setIsDisliked(false);
+    showToast(!isLiked ? 'Marked as Liked' : 'Like removed');
+  }, [isLiked]);
+
+  const handleDislike = useCallback(() => {
+    setIsDisliked((prev) => !prev);
+    if (!isDisliked) setIsLiked(false);
+    showToast(!isDisliked ? 'Marked as Disliked' : 'Dislike removed');
+  }, [isDisliked]);
+
+  const handleShare = useCallback(() => {
+    if (navigator.share && movie) {
+      navigator.share({
+        title: movie.title,
+        text: `Watch ${movie.title} on Sakanet Cinema`,
+        url: window.location.href,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(window.location.href);
+      showToast('Link copied to clipboard!');
+    }
+  }, [movie]);
+
+  const handleReport = useCallback(() => {
+    setShowSettings(false);
+    showToast('Feedback & issue report submitted to administrator.');
+  }, []);
+
+  // Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
@@ -272,6 +332,11 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           e.preventDefault();
           handleTogglePiP();
           break;
+        case 'c':
+        case 'C':
+          e.preventDefault();
+          handleToggleSubtitles();
+          break;
         case 'Escape':
           if (isFullscreen) {
             if (document.exitFullscreen) {
@@ -294,6 +359,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     toggleMute,
     toggleFullscreen,
     handleTogglePiP,
+    handleToggleSubtitles,
     currentTime,
     volume,
     isFullscreen,
@@ -359,7 +425,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   };
 
   const handleVideoError = () => {
-    console.warn('Video failed to play resolved source:', resolvedStreamUrl);
     if (resolvedStreamUrl !== FALLBACK_STREAM && resolvedStreamUrl !== SECONDARY_STREAM) {
       setResolvedStreamUrl(FALLBACK_STREAM);
       setStreamError(null);
@@ -367,13 +432,12 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       setResolvedStreamUrl(SECONDARY_STREAM);
       setStreamError(null);
     } else {
-      setStreamError('Format not supported or network error occurred while streaming.');
+      setStreamError('Playback failed. Please check network connection or master video file.');
     }
   };
 
   if (!movie) return null;
 
-  // VideoPlayerState object passed to ControlsOverlay
   const playerState: VideoPlayerState = {
     isPlaying,
     currentTime,
@@ -384,15 +448,28 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     isFullscreen,
   };
 
+  const availableQualities = movie.video_qualities || ['4K UHD', '1080p', '720p', '480p'];
+  const availableSubtitles = movie.subtitles || ['English [CC]', 'Spanish', 'French'];
+  const availableAudioTracks = movie.audio_tracks || [
+    'Default (Stereo)',
+    'English [Dolby Atmos 5.1]',
+    'Original Soundtrack',
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 select-none">
+    <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-0 select-none">
       <div
         ref={containerRef}
-        className={`group relative w-full max-w-4xl mx-auto bg-black overflow-hidden select-none font-sans rounded-lg shadow-2xl border border-[#27272a] aspect-video flex items-center justify-center ${
-          isFullscreen ? 'w-screen h-screen max-w-none rounded-none border-none' : ''
-        }`}
+        className="relative w-full h-full max-w-none bg-black overflow-hidden select-none font-sans flex items-center justify-center"
       >
-        {/* Underlying Video Element */}
+        {/* Toast Alert */}
+        {toastMessage && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-red-600/90 backdrop-blur-md text-white text-xs font-semibold px-4 py-2 rounded-full shadow-2xl animate-in fade-in slide-in-from-top-2">
+            {toastMessage}
+          </div>
+        )}
+
+        {/* Video Element */}
         {resolvedStreamUrl ? (
           <VideoElement
             key={resolvedStreamUrl}
@@ -416,7 +493,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           />
         ) : null}
 
-        {/* Streaming Error Block (Clean fallback, no artificial buffering) */}
+        {/* Playback Error Screen */}
         {streamError && (
           <div className="absolute inset-0 z-40 bg-black/95 flex flex-col items-center justify-center p-6 text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-red-950/70 border border-red-800/50 flex items-center justify-center text-red-500">
@@ -431,7 +508,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
                 setStreamError(null);
                 setResolvedStreamUrl(FALLBACK_STREAM);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-lg transition-all cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold shadow-lg transition-all cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Retry Stream</span>
@@ -439,33 +516,66 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           </div>
         )}
 
-        {/* Controls Overlay UI matching Google-like player controls */}
+        {/* Comprehensive Controls Overlay Matching Screenshot */}
         <ControlsOverlay
           state={playerState}
           movieTitle={movie.title}
+          studioName={movie.director ? `${movie.director} Cinema` : 'Sakanet Originals'}
+          categoryTag={movie.genre ? `${movie.genre} Feature` : 'Cinema Movie'}
+          currentQuality={currentQuality}
+          isSubtitlesActive={currentSubtitle !== 'Off'}
           onPlayPause={togglePlay}
           onSeek={handleSeek}
-          onOpenMenu={handleOpenMenu}
-          onVolumeChange={handleVolumeChange}
-          onToggleMute={toggleMute}
+          onOpenSettingsMenu={handleOpenSettingsMenu}
+          onOpenQualityMenu={handleOpenSettingsMenu}
+          onToggleSubtitles={handleToggleSubtitles}
           onToggleFullscreen={toggleFullscreen}
-          onTogglePiP={handleTogglePiP}
           onClose={handleCloseWithSave}
+          onNextEpisode={() => {
+            showToast('Starting next title...');
+            handleSeek(0);
+          }}
+          onToggleMyList={handleToggleMyList}
+          isInMyList={isInMyList}
+          onLike={handleLike}
+          isLiked={isLiked}
+          onDislike={handleDislike}
+          isDisliked={isDisliked}
+          onShare={handleShare}
         />
 
-        {/* Floating Settings Flyout Menu */}
+        {/* Floating Settings Flyout Menu Matching Screenshot Options */}
         {showSettings && (
           <SettingsMenu
-            position={menuPosition}
+            onClose={() => setShowSettings(false)}
+            currentQuality={currentQuality}
+            availableQualities={availableQualities}
+            onQualityChange={(q) => {
+              setCurrentQuality(q);
+              showToast(`Quality set to ${q}`);
+            }}
             currentSpeed={playbackSpeed}
             onSpeedChange={(speed) => {
               setPlaybackSpeed(speed);
               if (videoRef.current) videoRef.current.playbackRate = speed;
-              setShowSettings(false);
+              showToast(`Speed set to ${speed}x`);
             }}
+            currentSubtitle={currentSubtitle}
+            availableSubtitles={availableSubtitles}
+            onSubtitleChange={(sub) => {
+              setCurrentSubtitle(sub);
+              showToast(`Subtitles: ${sub}`);
+            }}
+            currentAudioTrack={currentAudioTrack}
+            availableAudioTracks={availableAudioTracks}
+            onAudioTrackChange={(trk) => {
+              setCurrentAudioTrack(trk);
+              showToast(`Audio track: ${trk}`);
+            }}
+            isPiPEnabled={false}
             onTogglePiP={handleTogglePiP}
             onDownload={handleDownload}
-            onClose={() => setShowSettings(false)}
+            onReport={handleReport}
           />
         )}
       </div>

@@ -16,8 +16,8 @@ import { UserProfile, DownloadItem } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface NavbarProps {
-  activeTab: 'feed' | 'browse' | 'downloads' | 'admin';
-  onTabChange: (tab: 'feed' | 'browse' | 'downloads' | 'admin') => void;
+  activeTab: 'settings' | 'browse' | 'downloads' | 'admin';
+  onTabChange: (tab: 'settings' | 'browse' | 'downloads' | 'admin') => void;
   isAndroidView: boolean;
   onToggleAndroidView: () => void;
   isOfflineMode: boolean;
@@ -53,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Zone 1: Brand Wordmark (Single Text Element in Display Face) */}
         <div className="flex items-center gap-6">
           <button
-            onClick={() => onTabChange('feed')}
+            onClick={() => onTabChange('browse')}
             className="text-2xl font-black font-display tracking-tight text-white flex items-center gap-1.5 focus:outline-none group"
           >
             <span className="text-red-600 transition-transform group-hover:scale-110 duration-200">
@@ -67,16 +67,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Zone 2: Clean Text Navigation Links */}
           <nav className="hidden lg:flex items-center gap-7 text-xs font-semibold tracking-wide">
             <button
-              onClick={() => onTabChange('feed')}
-              className={`transition-colors hover:text-white py-1 ${
-                activeTab === 'feed'
-                  ? 'text-red-500 border-b-2 border-red-600 font-bold'
-                  : 'text-zinc-400'
-              }`}
-            >
-              Live Feed
-            </button>
-            <button
               onClick={() => onTabChange('browse')}
               className={`transition-colors hover:text-white py-1 ${
                 activeTab === 'browse'
@@ -84,7 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'text-zinc-400'
               }`}
             >
-              Browse & Search
+              Browse &amp; Discover
             </button>
             <button
               onClick={() => onTabChange('downloads')}
@@ -102,6 +92,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {completedDownloads.length}
                 </span>
               ) : null}
+            </button>
+            <button
+              onClick={() => onTabChange('settings')}
+              className={`transition-colors hover:text-white py-1 ${
+                activeTab === 'settings'
+                  ? 'text-red-500 border-b-2 border-red-600 font-bold'
+                  : 'text-zinc-400'
+              }`}
+            >
+              Settings
             </button>
             {user?.email?.toLowerCase().trim() === 'ssakalivingstone25@gmail.com' && (
               <button

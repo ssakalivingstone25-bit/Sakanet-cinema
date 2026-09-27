@@ -1,4 +1,5 @@
 import { Movie, UserReview, DownloadItem, UserProfile, WatchProgress } from '../types';
+import { INITIAL_FEATURED_MOVIES } from './seedMovies';
 
 const STORAGE_KEYS = {
   MOVIES: 'sakanet_movies_v2',
@@ -24,14 +25,18 @@ export const guestUser: UserProfile = {
 export const defaultUser = guestUser;
 
 export const storageService = {
-  // --- MOVIES (Only movies uploaded and published by the admin) ---
+  // --- MOVIES (Strictly ONLY movies uploaded and published by the admin) ---
   getMovies(): Movie[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.MOVIES);
       if (!data) {
         return [];
       }
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed;
     } catch {
       return [];
     }
