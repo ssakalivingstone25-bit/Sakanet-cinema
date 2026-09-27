@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Movie, VideoPlayerState } from '../../types';
 import { storageService } from '../../services/storageService';
 import { mediaDB } from '../../services/mediaDB';
@@ -30,7 +30,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Initialize with immediate stream source to prevent "no supported sources"
+  // Initialize with immediate stream source to start playing without stall
   const [resolvedStreamUrl, setResolvedStreamUrl] = useState<string>(() => {
     if (movie?.file_url && !movie.file_url.startsWith('blob:')) {
       return movie.file_url;
@@ -38,8 +38,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     return FALLBACK_STREAM;
   });
 
-  const [isResolvingStream, setIsResolvingStream] = useState<boolean>(true);
-  const [isBuffering, setIsBuffering] = useState<boolean>(false);
   const [streamError, setStreamError] = useState<string | null>(null);
 
   // Core Playback state
@@ -55,13 +53,12 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // 1. Resolve Stream Source: checks IndexedDB, existing file_url, or fallback
+  // 1. Resolve Stream Source: checks IndexedDB, existing file_url, or resilient fallback
   useEffect(() => {
     let isCancelled = false;
 
     async function resolveSource() {
       if (!movie) return;
-      setIsResolvingStream(true);
       setStreamError(null);
 
       try {
@@ -69,7 +66,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
         const indexedDbUrl = await mediaDB.getVideoBlobUrl(movie.id);
         if (indexedDbUrl && !isCancelled) {
           setResolvedStreamUrl(indexedDbUrl);
-          setIsResolvingStream(false);
           return;
         }
 
@@ -80,7 +76,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
               const res = await fetch(movie.file_url, { method: 'HEAD' });
               if (res.ok && !isCancelled) {
                 setResolvedStreamUrl(movie.file_url);
-                setIsResolvingStream(false);
                 return;
               }
             } catch {
@@ -89,7 +84,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           } else {
             if (!isCancelled) {
               setResolvedStreamUrl(movie.file_url);
-              setIsResolvingStream(false);
               return;
             }
           }
@@ -98,13 +92,11 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
         // Use resilient cloud stream
         if (!isCancelled) {
           setResolvedStreamUrl(FALLBACK_STREAM);
-          setIsResolvingStream(false);
         }
       } catch (err) {
         console.warn('Error resolving movie stream source:', err);
         if (!isCancelled) {
           setResolvedStreamUrl(FALLBACK_STREAM);
-          setIsResolvingStream(false);
         }
       }
     }
@@ -168,14 +160,22 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     }
   }, [isMuted, volume]);
 
-  // 5. Fullscreen Toggle
+  // 5. Fullscreen Toggle (supports container fullscreen or fallback)
   const toggleFullscreen = useCallback(() => {
-    if (!containerRef.current) return;
+    const elem = containerRef.current || document.documentElement;
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen?.().catch(() => {});
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(() => {});
+      } else if ((elem as any).webkitRequestFullscreen) {
+        (elem as any).webkitRequestFullscreen();
+      }
       setIsFullscreen(true);
     } else {
-      document.exitFullscreen?.().catch(() => {});
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
       setIsFullscreen(false);
     }
   }, []);
@@ -238,10 +238,14 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           togglePlay();
           break;
         case 'ArrowLeft':
+        case 'j':
+        case 'J':
           e.preventDefault();
           handleSeek(currentTime - 10);
           break;
         case 'ArrowRight':
+        case 'l':
+        case 'L':
           e.preventDefault();
           handleSeek(currentTime + 10);
           break;
@@ -270,7 +274,9 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           break;
         case 'Escape':
           if (isFullscreen) {
-            document.exitFullscreen?.().catch(() => {});
+            if (document.exitFullscreen) {
+              document.exitFullscreen().catch(() => {});
+            }
             setIsFullscreen(false);
           } else {
             handleCloseWithSave();
@@ -325,7 +331,11 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       setIsFullscreen(!!document.fullscreenElement);
     };
     document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
+    };
   }, []);
 
   // Video Event Handlers
@@ -335,7 +345,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   };
 
   const handleLoadedMetadata = () => {
-    setIsBuffering(false);
     setStreamError(null);
     if (videoRef.current) {
       setDuration(videoRef.current.duration || (movie?.duration_minutes || 0) * 60);
@@ -358,7 +367,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       setResolvedStreamUrl(SECONDARY_STREAM);
       setStreamError(null);
     } else {
-      setIsBuffering(false);
       setStreamError('Format not supported or network error occurred while streaming.');
     }
   };
@@ -380,7 +388,9 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 select-none">
       <div
         ref={containerRef}
-        className="group relative w-full max-w-4xl mx-auto bg-black overflow-hidden select-none font-sans rounded-lg shadow-2xl border border-[#27272a] aspect-video flex items-center justify-center"
+        className={`group relative w-full max-w-4xl mx-auto bg-black overflow-hidden select-none font-sans rounded-lg shadow-2xl border border-[#27272a] aspect-video flex items-center justify-center ${
+          isFullscreen ? 'w-screen h-screen max-w-none rounded-none border-none' : ''
+        }`}
       >
         {/* Underlying Video Element */}
         {resolvedStreamUrl ? (
@@ -395,8 +405,8 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
             isMuted={isMuted}
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
-            onWaiting={() => setIsBuffering(true)}
-            onPlaying={() => setIsBuffering(false)}
+            onWaiting={() => {}}
+            onPlaying={() => {}}
             onError={handleVideoError}
             onEnded={() => {
               setIsPlaying(false);
@@ -406,15 +416,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           />
         ) : null}
 
-        {/* Buffering Loading Spinner Overlay */}
-        {(isResolvingStream || isBuffering) && !streamError && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-xs z-20 pointer-events-none">
-            <Loader2 className="w-10 h-10 text-[#3b82f6] animate-spin" />
-            <span className="text-xs text-zinc-300 font-mono mt-2">Buffering stream...</span>
-          </div>
-        )}
-
-        {/* Streaming Error Block */}
+        {/* Streaming Error Block (Clean fallback, no artificial buffering) */}
         {streamError && (
           <div className="absolute inset-0 z-40 bg-black/95 flex flex-col items-center justify-center p-6 text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-red-950/70 border border-red-800/50 flex items-center justify-center text-red-500">
@@ -447,6 +449,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           onVolumeChange={handleVolumeChange}
           onToggleMute={toggleMute}
           onToggleFullscreen={toggleFullscreen}
+          onTogglePiP={handleTogglePiP}
           onClose={handleCloseWithSave}
         />
 

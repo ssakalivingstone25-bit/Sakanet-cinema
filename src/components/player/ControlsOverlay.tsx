@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
-import { Volume2, Volume1, VolumeX, Play, Pause, Maximize, Minimize, MoreVertical, X } from 'lucide-react';
+import {
+  Volume2,
+  Volume1,
+  VolumeX,
+  Play,
+  Pause,
+  Maximize,
+  Minimize,
+  MoreVertical,
+  X,
+  RotateCcw,
+  RotateCw,
+  PictureInPicture,
+} from 'lucide-react';
 import { VideoPlayerState } from '../../types';
 
 interface ControlsOverlayProps {
@@ -10,6 +23,7 @@ interface ControlsOverlayProps {
   onVolumeChange?: (vol: number) => void;
   onToggleMute?: () => void;
   onToggleFullscreen?: () => void;
+  onTogglePiP?: () => void;
   movieTitle?: string;
   onClose?: () => void;
 }
@@ -34,6 +48,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   onVolumeChange,
   onToggleMute,
   onToggleFullscreen,
+  onTogglePiP,
   movieTitle,
   onClose,
 }) => {
@@ -41,7 +56,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
   const effectiveVolume = state.isMuted ? 0 : state.volume;
 
-  // Render appropriate speaker icon depending on volume level and mute state
+  // Speaker icon depending on volume level and mute state
   const renderVolumeIcon = () => {
     if (state.isMuted || effectiveVolume === 0) {
       return <VolumeX className="w-5 h-5 text-red-400 group-hover/vol:text-red-300" />;
@@ -54,28 +69,42 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
   return (
     <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-      {/* Top bar with Title & Close (if provided) */}
-      <div className="p-4 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <div className="flex items-center gap-3">
+      {/* Top Header bar with Title, PiP shortcut & Close */}
+      <div className="p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex items-center justify-between pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div className="flex items-center gap-3 min-w-0">
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1.5 rounded-full bg-black/60 hover:bg-white/20 text-white transition-colors cursor-pointer"
-              title="Close"
+              className="p-1.5 rounded-full bg-black/60 hover:bg-white/20 text-white transition-colors cursor-pointer shrink-0"
+              title="Close player"
               aria-label="Close player"
             >
               <X className="w-5 h-5" />
             </button>
           )}
           {movieTitle && (
-            <span className="text-white font-medium text-sm drop-shadow-md truncate max-w-md">
+            <span className="text-white font-medium text-sm drop-shadow-md truncate max-w-sm sm:max-w-md">
               {movieTitle}
             </span>
           )}
         </div>
+
+        {/* Quick Top Actions: PiP and Fullscreen */}
+        <div className="flex items-center gap-1">
+          {onTogglePiP && (
+            <button
+              onClick={onTogglePiP}
+              className="p-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer hidden sm:flex items-center justify-center"
+              title="Picture in Picture (P)"
+              aria-label="Picture in picture"
+            >
+              <PictureInPicture className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Bottom controls panel matching user spec */}
+      {/* Bottom controls panel with all playback controls */}
       <div className="bg-gradient-to-t from-black/95 via-black/60 to-transparent p-4 flex flex-col gap-3 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200 ease-in-out pointer-events-auto">
         {/* Slider Range Track */}
         <div className="w-full flex items-center h-2 group/track">
@@ -96,12 +125,13 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
         </div>
 
         <div className="flex items-center justify-between text-[#f4f4f5] text-sm">
-          <div className="flex items-center gap-3 sm:gap-4">
-            {/* Main Play/Pause Button */}
+          {/* Left section: Play/Pause, Rewind 10s, Forward 10s, Volume Slider, Time */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Play/Pause Button */}
             <button
               onClick={onPlayPause}
               className="text-[#e4e4e7] hover:text-white transform hover:scale-105 transition-all outline-none cursor-pointer flex items-center justify-center p-1 rounded-md hover:bg-white/10"
-              title={state.isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+              title={state.isPlaying ? 'Pause (Space / K)' : 'Play (Space / K)'}
               aria-label={state.isPlaying ? 'Pause' : 'Play'}
             >
               {state.isPlaying ? (
@@ -111,10 +141,30 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               )}
             </button>
 
+            {/* Quick Seek 10s backward */}
+            <button
+              onClick={() => onSeek(state.currentTime - 10)}
+              className="p-1 text-[#a1a1aa] hover:text-white hover:bg-white/10 rounded-md transition-colors cursor-pointer hidden xs:flex items-center justify-center"
+              title="Rewind 10 seconds (←)"
+              aria-label="Rewind 10 seconds"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+
+            {/* Quick Seek 10s forward */}
+            <button
+              onClick={() => onSeek(state.currentTime + 10)}
+              className="p-1 text-[#a1a1aa] hover:text-white hover:bg-white/10 rounded-md transition-colors cursor-pointer hidden xs:flex items-center justify-center"
+              title="Forward 10 seconds (→)"
+              aria-label="Forward 10 seconds"
+            >
+              <RotateCw className="w-4 h-4" />
+            </button>
+
             {/* Volume Control: Speaker Icon Button + Volume Slider */}
             {onVolumeChange && (
               <div
-                className="group/vol relative flex items-center gap-2"
+                className="group/vol relative flex items-center gap-1.5"
                 onMouseEnter={() => setIsVolumeHovered(true)}
                 onMouseLeave={() => setIsVolumeHovered(false)}
               >
@@ -128,7 +178,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
                   {renderVolumeIcon()}
                 </button>
 
-                {/* Always-interactive volume slider that expands on hover or remains accessible */}
+                {/* Always smooth responsive volume slider */}
                 <div
                   className={`flex items-center transition-all duration-200 ease-out overflow-hidden ${
                     isVolumeHovered ? 'w-20 sm:w-24 opacity-100' : 'w-16 sm:w-20 opacity-80 group-hover/vol:opacity-100'
@@ -153,18 +203,31 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               </div>
             )}
 
-            {/* Code Duration Numbers Tracker */}
+            {/* Duration Numbers Tracker */}
             <span className="font-mono text-xs font-medium tracking-wider text-[#a1a1aa] select-none ml-1">
               <span className="text-[#f4f4f5]">{formatTime(state.currentTime)}</span> / {formatTime(state.duration)}
             </span>
           </div>
 
+          {/* Right section: PiP, Fullscreen, and Settings Menu */}
           <div className="flex items-center gap-1 sm:gap-2">
+            {/* Picture-in-Picture Toggle */}
+            {onTogglePiP && (
+              <button
+                onClick={onTogglePiP}
+                className="p-1.5 text-[#a1a1aa] hover:text-white hover:bg-[#27272a] rounded-md transition-all outline-none cursor-pointer flex items-center justify-center"
+                title="Picture in picture (P)"
+                aria-label="Picture in picture"
+              >
+                <PictureInPicture className="w-4 h-4" />
+              </button>
+            )}
+
             {/* Fullscreen Toggle */}
             {onToggleFullscreen && (
               <button
                 onClick={onToggleFullscreen}
-                className="p-1.5 text-[#a1a1aa] hover:text-white hover:bg-[#27272a] rounded-md transition-all outline-none cursor-pointer"
+                className="p-1.5 text-[#a1a1aa] hover:text-white hover:bg-[#27272a] rounded-md transition-all outline-none cursor-pointer flex items-center justify-center"
                 title={state.isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
                 aria-label={state.isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
               >
@@ -176,10 +239,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               </button>
             )}
 
-            {/* Anchor Config Toggle */}
+            {/* Settings & Options 3-Dots */}
             <button
               onClick={onOpenMenu}
-              className="p-1.5 text-[#a1a1aa] hover:text-white hover:bg-[#27272a] rounded-md transition-all outline-none cursor-pointer"
+              className="p-1.5 text-[#a1a1aa] hover:text-white hover:bg-[#27272a] rounded-md transition-all outline-none cursor-pointer flex items-center justify-center"
               title="Settings"
               aria-label="Settings"
             >
