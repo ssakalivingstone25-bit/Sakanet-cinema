@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   ChevronDown,
@@ -84,7 +84,79 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   isDisliked = false,
   onShare,
 }) => {
+  // Controls visibility with auto-fade timer
   const [controlsVisible, setControlsVisible] = useState(true);
+  const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Transient feedback animation for center tap actions (rewind, forward, play/pause)
+  const [tapFeedback, setTapFeedback] = useState<'rewind' | 'forward' | 'play' | 'pause' | null>(null);
+  const feedbackTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const resetHideTimer = () => {
+    setControlsVisible(true);
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+    }
+    // Auto fade controls after 3.5 seconds of inactivity if currently playing
+    if (state.isPlaying) {
+      hideTimerRef.current = setTimeout(() => {
+        setControlsVisible(false);
+      }, 3500);
+    }
+  };
+
+  useEffect(() => {
+    resetHideTimer();
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    };
+  }, [state.isPlaying]);
+
+  // Handle tap on the main video screen
+  const handleScreenTap = (e: React.MouseEvent) => {
+    // If clicking directly on interactive controls, don't toggle screen
+    if ((e.target as HTMLElement).closest('button, input, select, a, [role="button"]')) {
+      resetHideTimer();
+      return;
+    }
+
+    if (controlsVisible) {
+      setControlsVisible(false);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    } else {
+      resetHideTimer();
+    }
+  };
+
+  const triggerFeedback = (action: 'rewind' | 'forward' | 'play' | 'pause') => {
+    setTapFeedback(action);
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    feedbackTimerRef.current = setTimeout(() => {
+      setTapFeedback(null);
+    }, 700);
+  };
+
+  const handleCenterRewind = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSeek(state.currentTime - 10);
+    triggerFeedback('rewind');
+    resetHideTimer();
+  };
+
+  const handleCenterForward = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSeek(state.currentTime + 10);
+    triggerFeedback('forward');
+    resetHideTimer();
+  };
+
+  const handleCenterPlayPause = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onPlayPause();
+    triggerFeedback(!state.isPlaying ? 'play' : 'pause');
+    resetHideTimer();
+  };
 
   const progressPercent = state.duration > 0
     ? (state.currentTime / state.duration) * 100
@@ -92,13 +164,20 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
   return (
     <div
-      className="absolute inset-0 flex flex-col justify-between pointer-events-auto select-none overflow-hidden transition-opacity duration-300"
-      onMouseMove={() => setControlsVisible(true)}
+      onClick={handleScreenTap}
+      onMouseMove={resetHideTimer}
+      onTouchStart={resetHideTimer}
+      className={`absolute inset-0 flex flex-col justify-between select-none overflow-hidden transition-opacity duration-500 z-30 ${
+        controlsVisible ? 'opacity-100 pointer-events-auto cursor-default' : 'opacity-0 pointer-events-none cursor-none'
+      }`}
     >
       {/* ========================================================
           1. TOP APP BAR (Back, Title, Studio • Tag, 1080p pill, CC, Cast, Gear, 3-Dots)
          ======================================================== */}
-      <div className="pt-3 px-4 sm:px-6 pb-4 bg-gradient-to-b from-black/90 via-black/50 to-transparent flex items-start justify-between gap-3 z-30">
+      <div
+        className="pt-3 px-4 sm:px-6 pb-4 bg-gradient-to-b from-black/90 via-black/50 to-transparent flex items-start justify-between gap-3 z-30"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Left: Back button + Title info */}
         <div className="flex items-center gap-3.5 min-w-0">
           {onClose && (
@@ -192,13 +271,16 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
       {/* ========================================================
           2. CENTER CONTROLS (Rewind 10s, Huge Play/Pause Circle, Forward 10s)
+          Featuring tap-to-fade transient animations
          ======================================================== */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
         <div className="flex items-center gap-6 sm:gap-10 pointer-events-auto">
           {/* Rewind 10s Circle Button */}
           <button
-            onClick={() => onSeek(state.currentTime - 10)}
-            className="w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/15 shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            onClick={handleCenterRewind}
+            className={`w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/15 shadow-xl transition-all active:scale-90 cursor-pointer ${
+              tapFeedback === 'rewind' ? 'scale-125 bg-red-600/50 border-red-400' : 'hover:scale-105'
+            }`}
             title="Rewind 10 seconds (←)"
             aria-label="Rewind 10 seconds"
           >
@@ -210,8 +292,12 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
           {/* Center Giant Play / Pause Circle Button */}
           <button
-            onClick={onPlayPause}
-            className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-black/75 hover:bg-black/90 text-white flex items-center justify-center backdrop-blur-md border border-white/20 shadow-2xl transition-all hover:scale-110 active:scale-95 cursor-pointer"
+            onClick={handleCenterPlayPause}
+            className={`w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-black/75 hover:bg-black/90 text-white flex items-center justify-center backdrop-blur-md border border-white/20 shadow-2xl transition-all active:scale-90 cursor-pointer ${
+              tapFeedback === 'play' || tapFeedback === 'pause'
+                ? 'scale-115 bg-red-600/70 border-red-400'
+                : 'hover:scale-110'
+            }`}
             title={state.isPlaying ? 'Pause (Space / K)' : 'Play (Space / K)'}
             aria-label={state.isPlaying ? 'Pause' : 'Play'}
           >
@@ -224,8 +310,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
           {/* Forward 10s Circle Button */}
           <button
-            onClick={() => onSeek(state.currentTime + 10)}
-            className="w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/15 shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            onClick={handleCenterForward}
+            className={`w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/15 shadow-xl transition-all active:scale-90 cursor-pointer ${
+              tapFeedback === 'forward' ? 'scale-125 bg-red-600/50 border-red-400' : 'hover:scale-105'
+            }`}
             title="Forward 10 seconds (→)"
             aria-label="Forward 10 seconds"
           >
@@ -239,8 +327,12 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
       {/* ========================================================
           3. BOTTOM TIMELINE & ACTIONS BAR
+          Pulled up with pb-8 sm:pb-10 and bottom-offset so it NEVER gets cut off or hidden behind netlify badge!
          ======================================================== */}
-      <div className="pt-6 pb-4 px-4 sm:px-6 bg-gradient-to-t from-black/95 via-black/75 to-transparent flex flex-col gap-2 z-30 pointer-events-auto">
+      <div
+        className="pt-6 pb-9 sm:pb-12 px-4 sm:px-8 bg-gradient-to-t from-black/95 via-black/85 to-transparent flex flex-col gap-2 z-30 pointer-events-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Scrub Track with Glowing Red Handle */}
         <div className="relative w-full flex items-center h-4 group/slider cursor-pointer">
           <input
@@ -249,8 +341,11 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
             max={state.duration || 0}
             step="0.1"
             value={state.currentTime}
-            onChange={(e) => onSeek(parseFloat(e.target.value))}
-            className="w-full accent-red-600 h-1 sm:h-1.5 cursor-pointer bg-zinc-700/80 rounded-lg appearance-none outline-none transition-all group-hover/slider:h-2"
+            onChange={(e) => {
+              onSeek(parseFloat(e.target.value));
+              resetHideTimer();
+            }}
+            className="w-full accent-red-600 h-1.5 sm:h-2 cursor-pointer bg-zinc-700/80 rounded-lg appearance-none outline-none transition-all group-hover/slider:h-2.5"
             style={{
               background: `linear-gradient(to right, #dc2626 0%, #dc2626 ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%, rgba(255,255,255,0.2) 100%)`,
             }}
@@ -258,18 +353,21 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
         </div>
 
         {/* Timestamps: Current Time (left) and Total Time (right) */}
-        <div className="flex items-center justify-between text-xs font-mono font-medium text-zinc-300 -mt-1 select-none">
+        <div className="flex items-center justify-between text-xs font-mono font-medium text-zinc-300 -mt-0.5 select-none">
           <span>{formatTime(state.currentTime)}</span>
           <span>{formatTime(state.duration)}</span>
         </div>
 
         {/* Secondary Bottom Toolbar (Next Episode, Add to My List, Like, Dislike, Share, Full Screen) */}
-        <div className="flex items-center justify-between pt-2 text-white">
+        <div className="flex items-center justify-between pt-2.5 text-white">
           {/* Left Actions */}
           <div className="flex items-center gap-6 sm:gap-8">
             {/* Next Episode */}
             <button
-              onClick={onNextEpisode}
+              onClick={() => {
+                onNextEpisode?.();
+                resetHideTimer();
+              }}
               className="flex items-center gap-2 text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
             >
               <SkipForward className="w-4 h-4 fill-current stroke-none" />
@@ -278,7 +376,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
             {/* Add to My List */}
             <button
-              onClick={onToggleMyList}
+              onClick={() => {
+                onToggleMyList?.();
+                resetHideTimer();
+              }}
               className="flex items-center gap-2 text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
             >
               {isInMyList ? (
@@ -299,7 +400,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
           <div className="flex items-center gap-6 sm:gap-8">
             {/* Like */}
             <button
-              onClick={onLike}
+              onClick={() => {
+                onLike?.();
+                resetHideTimer();
+              }}
               className={`flex items-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer ${
                 isLiked ? 'text-red-500' : 'text-zinc-300 hover:text-white'
               }`}
@@ -310,7 +414,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
             {/* Dislike */}
             <button
-              onClick={onDislike}
+              onClick={() => {
+                onDislike?.();
+                resetHideTimer();
+              }}
               className={`flex items-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer ${
                 isDisliked ? 'text-red-500' : 'text-zinc-300 hover:text-white'
               }`}
@@ -321,7 +428,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
             {/* Share */}
             <button
-              onClick={onShare}
+              onClick={() => {
+                onShare?.();
+                resetHideTimer();
+              }}
               className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
             >
               <Share2 className="w-4 h-4" />
@@ -331,7 +441,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
             {/* Full Screen */}
             {onToggleFullscreen && (
               <button
-                onClick={onToggleFullscreen}
+                onClick={() => {
+                  onToggleFullscreen();
+                  resetHideTimer();
+                }}
                 className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
                 title={state.isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
               >
