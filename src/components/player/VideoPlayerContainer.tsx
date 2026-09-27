@@ -1,11 +1,11 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
-import { Movie } from '../../types';
+import { Movie, VideoPlayerState } from '../../types';
 import { storageService } from '../../services/storageService';
 import { mediaDB } from '../../services/mediaDB';
 import { VideoElement } from './VideoElement';
-import { ControlsOverlay } from './ControlsOverlay';
-import { SettingsMenu } from './SettingsMenu';
+import ControlsOverlay from './ControlsOverlay';
+import SettingsMenu from './SettingsMenu';
 
 interface VideoPlayerContainerProps {
   movie: Movie | null;
@@ -42,37 +42,18 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const [isBuffering, setIsBuffering] = useState<boolean>(false);
   const [streamError, setStreamError] = useState<string | null>(null);
 
-  // Playback state
+  // Core Playback state
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [currentTime, setCurrentTime] = useState<number>(initialTime);
   const [duration, setDuration] = useState<number>(0);
-  const [bufferedEnd, setBufferedEnd] = useState<number>(0);
   const [volume, setVolume] = useState<number>(0.85);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
-  const [selectedQuality, setSelectedQuality] = useState<string>('1080p FHD');
-  const [selectedAudio, setSelectedAudio] = useState<string>('English [Dolby Atmos 5.1]');
-  const [selectedSubtitle, setSelectedSubtitle] = useState<string>('Off');
-
-  // UI state
-  const [showControls, setShowControls] = useState<boolean>(true);
-  const [showSettings, setShowSettings] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [isTheaterMode, setIsTheaterMode] = useState<boolean>(false);
 
-  const controlsTimeoutRef = useRef<number | null>(null);
-
-  // Format seconds to HH:MM:SS or MM:SS
-  const formatTime = useCallback((secs: number) => {
-    if (isNaN(secs) || secs < 0) return '00:00';
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = Math.floor(secs % 60);
-    if (h > 0) {
-      return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
-    }
-    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
-  }, []);
+  // Menu pop-over state
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // 1. Resolve Stream Source: checks IndexedDB, existing file_url, or fallback
   useEffect(() => {
@@ -84,7 +65,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       setStreamError(null);
 
       try {
-        // First check IndexedDB for direct device-uploaded video Blob
+        // Check IndexedDB for offline or device-stored video Blob
         const indexedDbUrl = await mediaDB.getVideoBlobUrl(movie.id);
         if (indexedDbUrl && !isCancelled) {
           setResolvedStreamUrl(indexedDbUrl);
@@ -94,7 +75,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
 
         // If movie has a valid file_url (http/https or existing blob), test it
         if (movie.file_url) {
-          // If blob URL that became revoked or expired, fallback gracefully
           if (movie.file_url.startsWith('blob:')) {
             try {
               const res = await fetch(movie.file_url, { method: 'HEAD' });
@@ -136,24 +116,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     };
   }, [movie]);
 
-  // 2. Auto-Hide Controls after 3 seconds of inactivity during playback
-  const resetControlsTimer = useCallback(() => {
-    setShowControls(true);
-    if (controlsTimeoutRef.current) {
-      window.clearTimeout(controlsTimeoutRef.current);
-    }
-    controlsTimeoutRef.current = window.setTimeout(() => {
-      if (isPlaying && !showSettings) {
-        setShowControls(false);
-      }
-    }, 3000);
-  }, [isPlaying, showSettings]);
-
-  const handleMouseMove = () => {
-    resetControlsTimer();
-  };
-
-  // 3. Play / Pause Toggle
+  // 2. Play / Pause Toggle
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
@@ -175,25 +138,15 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     }
   }, [movie, onProgressUpdated]);
 
-  // 4. Seek Relative (-10s / +10s)
-  const seekRelative = useCallback((seconds: number) => {
-    if (!videoRef.current) return;
-    const target = Math.max(0, Math.min(videoRef.current.duration || 0, videoRef.current.currentTime + seconds));
-    videoRef.current.currentTime = target;
-    setCurrentTime(target);
-    resetControlsTimer();
-  }, [resetControlsTimer]);
-
-  // 5. Seek Absolute (Click progress bar)
-  const seekAbsolute = useCallback((time: number) => {
+  // 3. Seek to time
+  const handleSeek = useCallback((time: number) => {
     if (!videoRef.current) return;
     const target = Math.max(0, Math.min(videoRef.current.duration || 0, time));
     videoRef.current.currentTime = target;
     setCurrentTime(target);
-    resetControlsTimer();
-  }, [resetControlsTimer]);
+  }, []);
 
-  // 6. Volume & Mute Management
+  // 4. Volume & Mute Management
   const handleVolumeChange = useCallback((vol: number) => {
     setVolume(vol);
     if (videoRef.current) {
@@ -201,8 +154,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       videoRef.current.muted = vol === 0;
       setIsMuted(vol === 0);
     }
-    resetControlsTimer();
-  }, [resetControlsTimer]);
+  }, []);
 
   const toggleMute = useCallback(() => {
     if (!videoRef.current) return;
@@ -214,10 +166,9 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       videoRef.current.muted = true;
       setIsMuted(true);
     }
-    resetControlsTimer();
-  }, [isMuted, volume, resetControlsTimer]);
+  }, [isMuted, volume]);
 
-  // 7. Fullscreen Toggle
+  // 5. Fullscreen Toggle
   const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return;
     if (!document.fullscreenElement) {
@@ -227,11 +178,11 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       document.exitFullscreen?.().catch(() => {});
       setIsFullscreen(false);
     }
-    resetControlsTimer();
-  }, [resetControlsTimer]);
+  }, []);
 
-  // 8. Picture in Picture / MiniPlayer
+  // 6. Picture-in-Picture / MiniPlayer
   const handleTogglePiP = useCallback(async () => {
+    setShowSettings(false);
     if (!videoRef.current || !movie) return;
 
     if (onEnterMiniPlayer) {
@@ -254,10 +205,29 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     }
   }, [movie, onEnterMiniPlayer, onProgressUpdated]);
 
+  // 7. Download Video File
+  const handleDownload = useCallback(() => {
+    setShowSettings(false);
+    if (!movie) return;
+    const link = document.createElement('a');
+    link.href = resolvedStreamUrl;
+    link.download = `${movie.title.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [movie, resolvedStreamUrl]);
+
+  // 8. Open Settings Menu Handler
+  const handleOpenMenu = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenuPosition({ x: rect.left, y: rect.top });
+    setShowSettings((prev) => !prev);
+  }, []);
+
   // 9. Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if user is typing in an input
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
 
       switch (e.key) {
@@ -269,11 +239,11 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          seekRelative(-10);
+          handleSeek(currentTime - 10);
           break;
         case 'ArrowRight':
           e.preventDefault();
-          seekRelative(10);
+          handleSeek(currentTime + 10);
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -292,11 +262,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
         case 'F':
           e.preventDefault();
           toggleFullscreen();
-          break;
-        case 't':
-        case 'T':
-          e.preventDefault();
-          setIsTheaterMode((prev) => !prev);
           break;
         case 'p':
         case 'P':
@@ -318,11 +283,12 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     togglePlay,
-    seekRelative,
+    handleSeek,
     handleVolumeChange,
     toggleMute,
     toggleFullscreen,
     handleTogglePiP,
+    currentTime,
     volume,
     isFullscreen,
   ]);
@@ -366,26 +332,13 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
     setCurrentTime(videoRef.current.currentTime);
-
-    // Calculate buffer end
-    if (videoRef.current.buffered.length > 0) {
-      for (let i = 0; i < videoRef.current.buffered.length; i++) {
-        if (
-          videoRef.current.buffered.start(i) <= videoRef.current.currentTime &&
-          videoRef.current.buffered.end(i) >= videoRef.current.currentTime
-        ) {
-          setBufferedEnd(videoRef.current.buffered.end(i));
-          break;
-        }
-      }
-    }
   };
 
   const handleLoadedMetadata = () => {
     setIsBuffering(false);
     setStreamError(null);
     if (videoRef.current) {
-      setDuration(videoRef.current.duration || movie?.duration_minutes! * 60 || 0);
+      setDuration(videoRef.current.duration || (movie?.duration_minutes || 0) * 60);
       if (initialTime > 0) {
         videoRef.current.currentTime = initialTime;
       }
@@ -398,7 +351,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
 
   const handleVideoError = () => {
     console.warn('Video failed to play resolved source:', resolvedStreamUrl);
-    // If not already on secondary stream, switch to reliable fallback
     if (resolvedStreamUrl !== FALLBACK_STREAM && resolvedStreamUrl !== SECONDARY_STREAM) {
       setResolvedStreamUrl(FALLBACK_STREAM);
       setStreamError(null);
@@ -413,21 +365,22 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
 
   if (!movie) return null;
 
+  // VideoPlayerState object passed to ControlsOverlay
+  const playerState: VideoPlayerState = {
+    isPlaying,
+    currentTime,
+    duration,
+    volume,
+    isMuted,
+    playbackSpeed,
+    isFullscreen,
+  };
+
   return (
-    <div
-      ref={containerRef}
-      onMouseMove={handleMouseMove}
-      onClick={resetControlsTimer}
-      className={`fixed inset-0 z-50 bg-black flex items-center justify-center overflow-hidden select-none ${
-        isTheaterMode && !isFullscreen ? 'p-0 sm:p-6 md:p-12' : ''
-      }`}
-    >
+    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 select-none">
       <div
-        className={`relative w-full h-full flex items-center justify-center bg-black transition-all ${
-          isTheaterMode && !isFullscreen
-            ? 'max-w-6xl max-h-[85vh] rounded-3xl overflow-hidden shadow-2xl border border-red-500/30'
-            : ''
-        }`}
+        ref={containerRef}
+        className="group relative w-full max-w-4xl mx-auto bg-black overflow-hidden select-none font-sans rounded-lg shadow-2xl border border-[#27272a] aspect-video flex items-center justify-center"
       >
         {/* Underlying Video Element */}
         {resolvedStreamUrl ? (
@@ -456,19 +409,19 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
         {/* Buffering Loading Spinner Overlay */}
         {(isResolvingStream || isBuffering) && !streamError && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-xs z-20 pointer-events-none">
-            <Loader2 className="w-12 h-12 text-red-600 animate-spin" />
-            <span className="text-xs text-zinc-300 font-mono mt-3">Buffering Sakanet Stream...</span>
+            <Loader2 className="w-10 h-10 text-[#3b82f6] animate-spin" />
+            <span className="text-xs text-zinc-300 font-mono mt-2">Buffering stream...</span>
           </div>
         )}
 
         {/* Streaming Error Block */}
         {streamError && (
           <div className="absolute inset-0 z-40 bg-black/95 flex flex-col items-center justify-center p-6 text-center space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-red-950/70 border border-red-800/50 flex items-center justify-center text-red-500">
-              <AlertCircle className="w-7 h-7" />
+            <div className="w-12 h-12 rounded-2xl bg-red-950/70 border border-red-800/50 flex items-center justify-center text-red-500">
+              <AlertCircle className="w-6 h-6" />
             </div>
             <div className="max-w-md space-y-1">
-              <h3 className="text-lg font-bold text-white">Stream Playback Error</h3>
+              <h3 className="text-base font-bold text-white">Playback Error</h3>
               <p className="text-xs text-zinc-400 leading-relaxed">{streamError}</p>
             </div>
             <button
@@ -476,62 +429,45 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
                 setStreamError(null);
                 setResolvedStreamUrl(FALLBACK_STREAM);
               }}
-              className="flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-red-600/30 transition-all cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-lg transition-all cursor-pointer"
             >
-              <RefreshCw className="w-4 h-4" />
-              <span>Retry Stream Feed</span>
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Stream</span>
             </button>
           </div>
         )}
 
-        {/* Controls Overlay UI */}
+        {/* Controls Overlay UI matching Google-like player controls */}
         <ControlsOverlay
+          state={playerState}
           movieTitle={movie.title}
-          genre={movie.genre}
-          isOfflinePlayback={isOfflinePlayback}
-          showControls={showControls}
-          isPlaying={isPlaying}
-          currentTime={currentTime}
-          duration={duration}
-          bufferedEnd={bufferedEnd}
-          volume={volume}
-          isMuted={isMuted}
-          isFullscreen={isFullscreen}
-          isTheaterMode={isTheaterMode}
-          showSettings={showSettings}
-          onClose={handleCloseWithSave}
-          onTogglePlay={togglePlay}
-          onSeekRelative={seekRelative}
-          onSeekAbsolute={seekAbsolute}
+          onPlayPause={togglePlay}
+          onSeek={handleSeek}
+          onOpenMenu={handleOpenMenu}
           onVolumeChange={handleVolumeChange}
           onToggleMute={toggleMute}
-          onToggleSettings={() => setShowSettings((prev) => !prev)}
           onToggleFullscreen={toggleFullscreen}
-          onToggleTheaterMode={() => setIsTheaterMode((prev) => !prev)}
-          onTogglePiP={handleTogglePiP}
-          formatTime={formatTime}
+          onClose={handleCloseWithSave}
         />
 
-        {/* Pop-over Settings Menu */}
-        <SettingsMenu
-          isOpen={showSettings}
-          onClose={() => setShowSettings(false)}
-          playbackSpeed={playbackSpeed}
-          onChangeSpeed={(s) => {
-            setPlaybackSpeed(s);
-            if (videoRef.current) videoRef.current.playbackRate = s;
-          }}
-          selectedQuality={selectedQuality}
-          onSelectQuality={(q) => setSelectedQuality(q)}
-          availableQualities={movie.video_qualities || ['4K UHD', '1080p FHD', '720p HD', '480p SD']}
-          selectedAudio={selectedAudio}
-          onSelectAudio={(a) => setSelectedAudio(a)}
-          audioTracks={movie.audio_tracks || ['English [Dolby Atmos 5.1]', 'Stereo Master']}
-          selectedSubtitle={selectedSubtitle}
-          onSelectSubtitle={(sub) => setSelectedSubtitle(sub)}
-          subtitles={movie.subtitles || ['English [CC]', 'Spanish', 'French']}
-        />
+        {/* Floating Settings Flyout Menu */}
+        {showSettings && (
+          <SettingsMenu
+            position={menuPosition}
+            currentSpeed={playbackSpeed}
+            onSpeedChange={(speed) => {
+              setPlaybackSpeed(speed);
+              if (videoRef.current) videoRef.current.playbackRate = speed;
+              setShowSettings(false);
+            }}
+            onTogglePiP={handleTogglePiP}
+            onDownload={handleDownload}
+            onClose={() => setShowSettings(false)}
+          />
+        )}
       </div>
     </div>
   );
 };
+
+export default VideoPlayerContainer;

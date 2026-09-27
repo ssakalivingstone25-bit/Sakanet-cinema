@@ -79,3 +79,14 @@ export interface WatchProgress {
   progressPercent: number;
   lastWatchedAt: number;
 }
+
+export interface VideoPlayerState {
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  volume: number;
+  isMuted: boolean;
+  playbackSpeed: number;
+  isFullscreen: boolean;
+  isTheaterMode?: boolean;
+}

@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useEffect } from 'react';
 
 interface VideoElementProps {
   streamUrl: string;
@@ -33,7 +33,15 @@ export const VideoElement = forwardRef<HTMLVideoElement, VideoElementProps>(
     },
     ref
   ) => {
-    // Only render video element when a non-empty streamUrl is provided
+    // Keep volume, muted, and speed synced directly to DOM element
+    useEffect(() => {
+      if (ref && 'current' in ref && ref.current) {
+        ref.current.volume = volume;
+        ref.current.muted = isMuted;
+        ref.current.playbackRate = playbackSpeed;
+      }
+    }, [ref, volume, isMuted, playbackSpeed]);
+
     if (!streamUrl) return null;
 
     return (
@@ -45,6 +53,8 @@ export const VideoElement = forwardRef<HTMLVideoElement, VideoElementProps>(
         playsInline
         webkit-playsinline="true"
         x5-playsinline="true"
+        preload="auto"
+        crossOrigin="anonymous"
         controls={false}
         disablePictureInPicture={false}
         onTimeUpdate={onTimeUpdate}
@@ -54,13 +64,7 @@ export const VideoElement = forwardRef<HTMLVideoElement, VideoElementProps>(
         onError={onError}
         onEnded={onEnded}
         className="w-full h-full object-contain pointer-events-none select-none bg-black"
-      >
-        {streamUrl && <source src={streamUrl} type="video/mp4" />}
-        {fallbackStreamUrl && fallbackStreamUrl !== streamUrl && (
-          <source src={fallbackStreamUrl} type="video/mp4" />
-        )}
-        Your browser does not support HTML5 video streaming.
-      </video>
+      />
     );
   }
 );
