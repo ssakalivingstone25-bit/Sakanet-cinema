@@ -152,58 +152,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
-          {/* Network Airplane Mode Toggle */}
-          <button
-            onClick={() => onToggleOfflineMode(!isOfflineMode)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-              isOfflineMode
-                ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
-                : 'bg-zinc-900 border-white/10 text-zinc-400 hover:text-zinc-200'
-            }`}
-            title={
-              isOfflineMode
-                ? 'Offline Airplane Mode is active. WorkManager paused network downloads.'
-                : 'Connected to Network. Click to simulate network disconnect.'
-            }
-          >
-            {isOfflineMode ? (
-              <>
-                <WifiOff className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">Offline Mode</span>
-              </>
-            ) : (
-              <>
-                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">Online</span>
-              </>
-            )}
-          </button>
-
           {/* PWA In-App Install Prompt */}
           <PWAInstallButton variant="navbar" />
-
-          {/* Android App vs Web View Mode Toggle */}
-          <button
-            onClick={onToggleAndroidView}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-              isAndroidView
-                ? 'bg-red-600 text-white border-red-500 shadow-md shadow-red-700/30'
-                : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-white/15'
-            }`}
-            title="Toggle between Desktop Cinema and Mobile App layout"
-          >
-            {isAndroidView ? (
-              <>
-                <Tv className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Web Cinema</span>
-              </>
-            ) : (
-              <>
-                <Smartphone className="w-3.5 h-3.5 text-red-500" />
-                <span>Android App</span>
-              </>
-            )}
-          </button>
 
           {/* User Profile / Google OAuth Button */}
           <div className="flex items-center gap-2 pl-1 border-l border-white/10">

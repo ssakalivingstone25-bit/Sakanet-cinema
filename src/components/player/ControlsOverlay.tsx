@@ -327,10 +327,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
       {/* ========================================================
           3. BOTTOM TIMELINE & ACTIONS BAR
-          Pulled up with pb-8 sm:pb-10 and bottom-offset so it NEVER gets cut off or hidden behind netlify badge!
+          Elevated with pb-14 sm:pb-16 and bottom margin to guarantee it stays completely clear of bottom badges (Netlify badge) and device navigation bars
          ======================================================== */}
       <div
-        className="pt-6 pb-9 sm:pb-12 px-4 sm:px-8 bg-gradient-to-t from-black/95 via-black/85 to-transparent flex flex-col gap-2 z-30 pointer-events-auto"
+        className="pt-6 pb-14 sm:pb-16 px-4 sm:px-8 mb-2 sm:mb-4 bg-gradient-to-t from-black/95 via-black/85 to-transparent flex flex-col gap-2 z-30 pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Scrub Track with Glowing Red Handle */}

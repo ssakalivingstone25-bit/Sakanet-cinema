@@ -19,6 +19,11 @@ import {
 import { Movie, DownloadItem, UserReview } from '../types';
 import { storageService } from '../services/storageService';
 import { downloadEngine } from '../services/downloadEngine';
+import {
+  saveReviewToFirestore,
+  subscribeToMovieReviews,
+  updateMovieRatingInFirestore,
+} from '../services/firebase';
 
 interface MovieDetailsModalProps {
   movie: Movie | null;
@@ -50,11 +55,47 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
 
   useEffect(() => {
     if (movie) {
-      setReviews(storageService.getReviews(movie.id));
+      // Local cache fallback
+      const initialLocal = storageService.getReviews(movie.id);
+      setReviews(initialLocal);
       setUserComment('');
       setReviewSuccess(false);
       const prog = storageService.getWatchProgressForMovie(movie.id);
       setSavedProgress(prog ? prog.currentTime : 0);
+
+      // Real-time Firestore review synchronization for genuine ratings
+      const unsubscribe = subscribeToMovieReviews(movie.id, (firestoreReviews) => {
+        if (firestoreReviews && firestoreReviews.length > 0) {
+          // Merge reviews ensuring unique IDs
+          const map = new Map<string, UserReview>();
+          initialLocal.forEach((r) => map.set(r.id, r));
+          firestoreReviews.forEach((r: any) => {
+            map.set(r.id, {
+              id: r.id,
+              movie_id: r.movie_id,
+              user_name: r.user_name || 'Verified Viewer',
+              user_email: r.user_email || '',
+              rating: Number(r.rating) || 5,
+              comment: r.comment || '',
+              created_at: r.created_at || new Date().toISOString(),
+            });
+          });
+          const combined = Array.from(map.values()).sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          setReviews(combined);
+
+          // Calculate real average
+          const sum = combined.reduce((acc, curr) => acc + curr.rating, 0);
+          const realAvg = Number((sum / combined.length).toFixed(1));
+          movie.rating = realAvg;
+          movie.review_count = combined.length;
+        }
+      });
+
+      return () => {
+        unsubscribe();
+      };
     }
   }, [movie]);
 
@@ -77,13 +118,26 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     }
   };
 
-  const handleRatingSubmit = (e: React.FormEvent) => {
+  const handleRatingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userComment.trim()) return;
+    if (!userComment.trim() || !movie) return;
 
     setSubmittingReview(true);
+    // 1. Save to local storage
     const newRev = storageService.addReview(movie.id, userRating, userComment);
-    setReviews([newRev, ...reviews]);
+    const updatedReviews = [newRev, ...reviews.filter((r) => r.id !== newRev.id)];
+    setReviews(updatedReviews);
+
+    // 2. Real-time compute actual rating
+    const sum = updatedReviews.reduce((acc, curr) => acc + curr.rating, 0);
+    const realAvg = Number((sum / updatedReviews.length).toFixed(1));
+    movie.rating = realAvg;
+    movie.review_count = updatedReviews.length;
+
+    // 3. Persist to Firestore database in real-time
+    saveReviewToFirestore(newRev);
+    updateMovieRatingInFirestore(movie.id, realAvg, updatedReviews.length);
+
     setUserComment('');
     setReviewSuccess(true);
     setSubmittingReview(false);
@@ -221,19 +275,6 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
             <span className="text-xs bg-red-950/60 text-red-400 border border-red-800/40 px-1.5 py-0.2 rounded font-mono">
               {movie.rating.toFixed(1)}★ ({totalReviews})
             </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('download_worker')}
-            className={`py-3 px-4 border-b-2 transition-colors flex items-center gap-2 ${
-              activeTab === 'download_worker'
-                ? 'border-red-600 text-white font-semibold'
-                : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <span>WorkManager Offline Worker</span>
-            {downloadItem && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping" />
-            )}
           </button>
         </div>
 
@@ -489,139 +530,6 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                       <p className="text-xs text-zinc-300 leading-relaxed pl-8">{rev.comment}</p>
                     </div>
                   ))
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'download_worker' && (
-            <div className="space-y-5">
-              <div className="bg-zinc-900/60 border border-white/5 rounded-xl p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-red-950/60 border border-red-800/40 flex items-center justify-center text-red-400">
-                      <HardDrive className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">
-                        Android WorkManager Chunk Sync
-                      </h4>
-                      <p className="text-xs text-zinc-400">
-                        Fault-tolerant chunk downloading with auto-pause and auto-resume
-                      </p>
-                    </div>
-                  </div>
-
-                  {downloadItem && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handlePauseResume}
-                        className="flex items-center gap-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-lg border border-white/10 transition-colors"
-                      >
-                        {isDownloading ? (
-                          <>
-                            <Pause className="w-3.5 h-3.5 text-amber-400" /> Pause Worker
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-3.5 h-3.5 text-emerald-400 fill-current" /> Resume
-                            Worker
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {downloadItem ? (
-                  <div className="space-y-3 pt-2">
-                    {/* Progress Bar */}
-                    <div>
-                      <div className="flex justify-between text-xs text-zinc-400 mb-1 font-mono">
-                        <span>Progress: {downloadItem.progress}%</span>
-                        <span>
-                          {downloadItem.downloaded_mb} MB / {downloadItem.file_size_mb} MB
-                        </span>
-                      </div>
-                      <div className="w-full h-3 bg-zinc-800 rounded-full overflow-hidden p-0.5">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${
-                            isCompleted
-                              ? 'bg-emerald-500'
-                              : isPaused
-                              ? 'bg-amber-500'
-                              : 'bg-red-600'
-                          }`}
-                          style={{ width: `${downloadItem.progress}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Chunk Blocks */}
-                    <div>
-                      <span className="text-[11px] text-zinc-400 uppercase tracking-wider block mb-1.5 font-medium">
-                        Chunk Status Pipeline (4 Chunks)
-                      </span>
-                      <div className="grid grid-cols-4 gap-2">
-                        {[1, 2, 3, 4].map((chunk) => {
-                          const isDone =
-                            isCompleted || chunk < downloadItem.current_chunk;
-                          const isCurr =
-                            !isCompleted && chunk === downloadItem.current_chunk;
-
-                          return (
-                            <div
-                              key={chunk}
-                              className={`p-2.5 rounded-lg border text-center text-xs transition-all ${
-                                isDone
-                                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
-                                  : isCurr
-                                  ? 'bg-red-950/40 border-red-500/60 text-white animate-pulse'
-                                  : 'bg-zinc-900 border-white/5 text-zinc-600'
-                              }`}
-                            >
-                              <span className="block font-mono text-[10px]">Chunk {chunk}/4</span>
-                              <span className="font-semibold text-xs mt-0.5 block">
-                                {isDone ? 'Encrypted' : isCurr ? 'Downloading' : 'Pending'}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Security & Storage Details */}
-                    <div className="bg-black/40 border border-white/5 rounded-lg p-3 text-xs space-y-1 font-mono text-zinc-400">
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Encryption Method:</span>
-                        <span className="text-emerald-400">AES-256-GCM (SQLCipher)</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Room Storage URI:</span>
-                        <span className="truncate max-w-[280px] text-zinc-300">
-                          {downloadItem.local_storage_uri}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Transfer Speed:</span>
-                        <span className="text-white">
-                          {isDownloading ? `${downloadItem.download_speed_mbps} MB/s` : '0 MB/s'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <p className="text-xs text-zinc-400 mb-3">
-                      This movie is not yet saved to local encrypted device storage.
-                    </p>
-                    <button
-                      onClick={handleStartDownload}
-                      className="bg-red-600 hover:bg-red-500 text-white font-medium text-xs px-4 py-2 rounded-lg transition-all"
-                    >
-                      Start Chunked Download ({(movie.file_size_mb / 1024).toFixed(2)} GB)
-                    </button>
-                  </div>
                 )}
               </div>
             </div>

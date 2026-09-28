@@ -77,49 +77,18 @@ export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = ({
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-8 py-8 space-y-6">
-      {/* Top Banner & Network Connection Bar */}
+      {/* Top Banner */}
       <div className="bg-[#121216] border border-white/10 rounded-xl p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="w-2 h-2 rounded-full bg-red-600 inline-block" />
             <h1 className="text-2xl font-bold font-display text-white tracking-tight">
-              Encrypted Offline Library
+              Downloaded Movies
             </h1>
           </div>
           <p className="text-xs text-zinc-400 max-w-xl">
-            Chunk-based downloads managed by Android WorkManager. Media is secured via SQLCipher
-            AES-256 encryption for offline playback without network access.
+            Directly saved movies to your device storage. Playable inside browser or external media players anytime.
           </p>
-        </div>
-
-        {/* Network State Switch */}
-        <div className="flex items-center gap-3 bg-zinc-900 border border-white/10 rounded-lg p-2.5 shrink-0">
-          <div className="flex items-center gap-2">
-            {isOfflineMode ? (
-              <WifiOff className="w-4 h-4 text-amber-500" />
-            ) : (
-              <Wifi className="w-4 h-4 text-emerald-400" />
-            )}
-            <div className="text-xs">
-              <span className="font-semibold block text-zinc-200">
-                {isOfflineMode ? 'Airplane / Offline Mode' : 'Online (Wi-Fi 6)'}
-              </span>
-              <span className="text-[10px] text-zinc-400">
-                {isOfflineMode ? 'Offline playback enabled' : 'Active network connection'}
-              </span>
-            </div>
-          </div>
-
-          <button
-            onClick={() => onToggleOfflineMode(!isOfflineMode)}
-            className={`px-3 py-1.5 rounded text-xs font-semibold transition-all ${
-              isOfflineMode
-                ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-sm'
-                : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/10'
-            }`}
-          >
-            {isOfflineMode ? 'Turn Online' : 'Set Offline'}
-          </button>
         </div>
       </div>
 
@@ -145,7 +114,7 @@ export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = ({
           </div>
 
           <div className="flex items-center justify-between text-[11px] text-zinc-500">
-            <span>Room Database: com.sakanet.local.EncryptedAppDatabase</span>
+            <span>Storage: Device Local Media Storage</span>
             {downloads.length > 0 && (
               <button
                 onClick={handleClearAll}
@@ -157,20 +126,20 @@ export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = ({
           </div>
         </div>
 
-        {/* Security & Cipher Spec */}
+        {/* Media Storage Policy */}
         <div className="bg-[#121216] border border-white/10 rounded-xl p-5 flex flex-col justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
               <ShieldCheck className="w-4 h-4" />
-              <span>Encrypted Chunk Policy</span>
+              <span>Full Video Files</span>
             </div>
             <p className="text-[11px] text-zinc-400">
-              Each movie is divided into 4 encrypted blobs. Unlocking requires dynamic AES-256 tokens linked to user account.
+              Downloaded videos are saved directly to your device storage as standard .mp4 files for easy offline watching anywhere.
             </p>
           </div>
           <div className="pt-2 text-[10px] font-mono text-zinc-500 border-t border-white/5 flex items-center justify-between">
-            <span>WorkManager Worker: v2.9.0</span>
-            <span className="text-zinc-400 font-semibold">SQLCipher 4.5</span>
+            <span>Format: MP4 High Definition</span>
+            <span className="text-zinc-400 font-semibold">1080p / 720p</span>
           </div>
         </div>
       </div>
@@ -324,8 +293,26 @@ export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = ({
                       className="flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition-all shadow-md"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>{isCompleted ? 'Play Offline (Blob)' : 'Stream Now'}</span>
+                      <span>{isCompleted ? 'Play Movie' : 'Stream Now'}</span>
                     </button>
+
+                    {/* Direct Save to Device Button if already downloaded */}
+                    {isCompleted && item.blob_url && (
+                      <button
+                        onClick={() => {
+                          const a = document.createElement('a');
+                          a.href = item.blob_url!;
+                          a.download = `${item.movie_title.replace(/\s+/g, '_')}.mp4`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        }}
+                        className="p-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg border border-white/10 transition-colors"
+                        title="Save MP4 file to device storage"
+                      >
+                        <Download className="w-4 h-4 text-emerald-400" />
+                      </button>
+                    )}
 
                     {/* Pause / Resume button if active */}
                     {!isCompleted && (

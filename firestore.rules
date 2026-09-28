@@ -36,17 +36,18 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Movies catalog: Anyone can view active movies, admin can write/delete
+    // Movies catalog: Anyone can view active movies, admin can write/delete, signed in users can update rating
     match /movies/{movieId} {
       allow get: if true;
       allow list: if true;
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isSignedIn() || isAdmin();
     }
 
     // Reviews collection: Authenticated users can create reviews, owners can delete their reviews
     match /reviews/{reviewId} {
       allow get, list: if true;
-      allow create: if isSignedIn() && request.resource.data.user_id == request.auth.uid;
+      allow create: if isSignedIn();
       allow update, delete: if isSignedIn() && (resource.data.user_id == request.auth.uid || isAdmin());
     }
   }

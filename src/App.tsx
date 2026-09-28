@@ -233,56 +233,26 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#09090b] text-[#f4f4f5] flex flex-col font-sans selection:bg-red-600 selection:text-white">
-      {/* Top Bar for Desktop view */}
-      {!isAndroidView && (
-        <Navbar
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          isAndroidView={isAndroidView}
-          onToggleAndroidView={() => setIsAndroidView(!isAndroidView)}
-          isOfflineMode={isOfflineMode}
-          onToggleOfflineMode={handleToggleOfflineMode}
-          user={user}
-          downloads={downloads}
-          searchTerm={searchTerm}
-          onSearchChange={(q) => {
-            setSearchTerm(q);
-            if (activeTab !== 'browse') setActiveTab('browse');
-          }}
-          onOpenAuth={() => setShowAuthModal(true)}
-        />
-      )}
-
-      {/* Main Content Area (supports wrapping in Mobile frame or widescreen) */}
-      <AndroidAppFrame
+      {/* Top Bar for Desktop and Mobile */}
+      <Navbar
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        isOfflineMode={isOfflineMode}
-        downloadsCount={downloads.length}
-        activeDownloadsCount={activeDownloadsCount}
-        isAndroidView={isAndroidView}
-        onToggleViewMode={() => setIsAndroidView(!isAndroidView)}
-        onOpenAuth={() => setShowAuthModal(true)}
+        isAndroidView={false}
+        onToggleAndroidView={() => {}}
+        isOfflineMode={false}
+        onToggleOfflineMode={() => {}}
         user={user}
-      >
-        {/* Offline Mode Warning Banner */}
-        {isOfflineMode && activeTab !== 'downloads' && (
-          <div className="bg-amber-950/80 border-b border-amber-500/40 px-4 py-2 text-xs text-amber-200 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <WifiOff className="w-4 h-4 text-amber-400" />
-              <span>
-                <strong>Offline Mode Active:</strong> Live streaming is paused. You can play all downloaded
-                titles offline from your Encrypted Downloads.
-              </span>
-            </div>
-            <button
-              onClick={() => setActiveTab('downloads')}
-              className="text-amber-400 underline font-semibold text-[11px]"
-            >
-              View Offline Library
-            </button>
-          </div>
-        )}
+        downloads={downloads}
+        searchTerm={searchTerm}
+        onSearchChange={(q) => {
+          setSearchTerm(q);
+          if (activeTab !== 'browse') setActiveTab('browse');
+        }}
+        onOpenAuth={() => setShowAuthModal(true)}
+      />
+
+      {/* Main Content Area */}
+      <AndroidAppFrame>
 
         {/* SETTINGS TAB (Replaces former home/feed tab) */}
         {activeTab === 'settings' && (

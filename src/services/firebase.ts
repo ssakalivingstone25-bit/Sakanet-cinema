@@ -310,3 +310,52 @@ export async function deleteMultipleMoviesFromFirestore(movieIds: string[]): Pro
     console.warn('Firestore bulk delete notice:', err);
   }
 }
+
+/**
+ * Persist user reviews in Firestore for live, authentic rating calculations
+ */
+export async function saveReviewToFirestore(review: any): Promise<void> {
+  try {
+    const revRef = doc(db, 'reviews', review.id);
+    await setDoc(revRef, review, { merge: true });
+  } catch (err) {
+    console.warn('Firestore review save notice:', err);
+  }
+}
+
+export function subscribeToMovieReviews(movieId: string, callback: (reviews: any[]) => void): () => void {
+  try {
+    const reviewsRef = collection(db, 'reviews');
+    return onSnapshot(
+      reviewsRef,
+      (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.movie_id === movieId) {
+            list.push({ id: docSnap.id, ...data });
+          }
+        });
+        callback(list);
+      },
+      (error) => {
+        console.warn('Firestore reviews subscription notice:', error);
+      }
+    );
+  } catch (err) {
+    console.warn('Failed to subscribe to firestore reviews:', err);
+    return () => {};
+  }
+}
+
+export async function updateMovieRatingInFirestore(movieId: string, rating: number, reviewCount: number): Promise<void> {
+  try {
+    const movieRef = doc(db, 'movies', movieId);
+    await updateDoc(movieRef, {
+      rating,
+      review_count: reviewCount,
+    });
+  } catch (err) {
+    console.warn('Firestore movie rating update notice:', err);
+  }
+}

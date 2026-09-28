@@ -3,6 +3,7 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Movie, VideoPlayerState } from '../../types';
 import { storageService } from '../../services/storageService';
 import { mediaDB } from '../../services/mediaDB';
+import { downloadEngine } from '../../services/downloadEngine';
 import { VideoElement } from './VideoElement';
 import ControlsOverlay from './ControlsOverlay';
 import SettingsMenu from './SettingsMenu';
@@ -221,18 +222,13 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     }
   }, [movie, onEnterMiniPlayer, onProgressUpdated]);
 
-  // 7. Download Video File
+  // 7. Download Video File (Real file download to device storage)
   const handleDownload = useCallback(() => {
     setShowSettings(false);
     if (!movie) return;
-    const link = document.createElement('a');
-    link.href = resolvedStreamUrl;
-    link.download = `${movie.title.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast(`Downloading "${movie.title}"`);
-  }, [movie, resolvedStreamUrl]);
+    downloadEngine.triggerDownload(movie);
+    showToast(`Downloading "${movie.title}" to device storage...`);
+  }, [movie]);
 
   // 8. Open Settings Menu Handler
   const handleOpenSettingsMenu = useCallback((e: React.MouseEvent) => {

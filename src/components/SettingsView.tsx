@@ -280,26 +280,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             />
           </button>
         </div>
-
-        {/* Airplane / Offline Network Toggle */}
-        <div className="flex items-center justify-between py-2">
-          <div>
-            <div className="text-sm font-semibold text-white">Offline Room Simulation</div>
-            <div className="text-xs text-zinc-400">Pause live network and stream exclusively from offline media</div>
-          </div>
-          <button
-            onClick={() => onToggleOfflineMode(!isOfflineMode)}
-            className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-              isOfflineMode ? 'bg-amber-600' : 'bg-zinc-800'
-            }`}
-          >
-            <div
-              className={`w-5 h-5 rounded-full bg-white transition-transform transform absolute top-0.5 left-0.5 ${
-                isOfflineMode ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
-        </div>
       </div>
 
       {/* 3. DOWNLOADS & STORAGE MANAGEMENT */}
