@@ -14,6 +14,7 @@ import { AdminPortalView } from './components/AdminPortalView';
 import { BrowseCatalogView } from './components/BrowseCatalogView';
 import { SettingsView } from './components/SettingsView';
 import { AndroidAppFrame } from './components/AndroidAppFrame';
+import { BottomNavBar } from './components/BottomNavBar';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { GoogleAuthModal } from './components/GoogleAuthModal';
 import { AuthGateScreen } from './components/AuthGateScreen';
@@ -251,10 +252,10 @@ export default function App() {
         onOpenAuth={() => setShowAuthModal(true)}
       />
 
-      {/* Main Content Area */}
-      <AndroidAppFrame>
-
-        {/* SETTINGS TAB (Replaces former home/feed tab) */}
+      {/* Main Content Area with bottom navigation clearance */}
+      <div className="flex-1 w-full pb-20">
+        <AndroidAppFrame>
+          {/* SETTINGS TAB (Replaces former home/feed tab) */}
         {activeTab === 'settings' && (
           <SettingsView
             user={user}
@@ -352,7 +353,18 @@ export default function App() {
               </div>
             </div>
           ))}
-      </AndroidAppFrame>
+        </AndroidAppFrame>
+      </div>
+
+      {/* Global Bottom Navigation Bar (Browse, Downloads, Settings, Admin Portal) */}
+      <BottomNavBar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        downloadsCount={downloads.length}
+        activeDownloadsCount={activeDownloadsCount}
+        user={user}
+        onOpenAuth={() => setShowAuthModal(true)}
+      />
 
       {/* Movie Details Modal */}
       {selectedMovie && (
