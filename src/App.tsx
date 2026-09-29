@@ -146,13 +146,17 @@ export default function App() {
   const handlePlayMovie = (movie: Movie, startTime: number = 0, offline: boolean = false) => {
     // If mini player was playing, close it
     setMiniPlayer(null);
+    storageService.incrementViewCount(movie.id);
     setPlaybackStartTime(startTime);
     setIsOfflinePlayback(offline);
     setPlayingMovie(movie);
+    refreshCatalog();
   };
 
   const handleDownloadMovie = (movie: Movie) => {
+    storageService.incrementDownloadCount(movie.id);
     downloadEngine.triggerDownload(movie);
+    refreshCatalog();
   };
 
   // Enter Picture-in-Picture mode
@@ -281,10 +285,12 @@ export default function App() {
             onSearchChange={setSearchTerm}
             user={user}
             onOpenAuth={() => setShowAuthModal(true)}
+            continueWatchingList={continueWatchingList}
+            onTabChange={setActiveTab}
           />
         )}
 
-        {/* ENCRYPTED DOWNLOADS TAB */}
+        {/* DOWNLOADS TAB */}
         {activeTab === 'downloads' && (
           <OfflineDownloadsView
             downloads={downloads}

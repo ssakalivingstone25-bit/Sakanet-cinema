@@ -1,8 +1,9 @@
-import { Movie, UserReview, DownloadItem, UserProfile, WatchProgress } from '../types';
+import { Movie, VJ, UserReview, DownloadItem, UserProfile, WatchProgress } from '../types';
 import { INITIAL_FEATURED_MOVIES } from './seedMovies';
 
 const STORAGE_KEYS = {
   MOVIES: 'sakanet_movies_v2',
+  VJS: 'sakanet_vjs_v2',
   REVIEWS: 'sakanet_reviews_v2',
   DOWNLOADS: 'sakanet_downloads_v2',
   USER: 'sakanet_user_v2',
@@ -36,9 +37,47 @@ export const storageService = {
       if (!Array.isArray(parsed)) {
         return [];
       }
-      return parsed;
+      // Strictly ensure catalog only contains actual movies uploaded by admin
+      const nonSimulated = parsed.filter(
+        (m: Movie) =>
+          !m.id.startsWith('movie-the-last-') &&
+          !m.id.startsWith('movie-broken-dreams-') &&
+          !m.id.startsWith('movie-city-shadows-') &&
+          !m.id.startsWith('movie-the-journey-') &&
+          !m.id.startsWith('movie-the-whisper-') &&
+          !m.id.startsWith('movie-the-escape-') &&
+          !m.id.startsWith('movie-shadow-line-') &&
+          !m.id.startsWith('movie-higher-ground-') &&
+          !m.id.startsWith('movie-beyond-earth-') &&
+          !m.id.startsWith('movie-the-silent-hour-') &&
+          !m.id.startsWith('movie-redemption-road-') &&
+          !m.id.startsWith('movie-eternal-echoes-') &&
+          !m.id.startsWith('movie-shadow-protocol-')
+      );
+      if (nonSimulated.length !== parsed.length) {
+        this.saveMovies(nonSimulated);
+      }
+      return nonSimulated;
     } catch {
       return [];
+    }
+  },
+
+  incrementViewCount(movieId: string): void {
+    const movies = this.getMovies();
+    const movie = movies.find((m) => m.id === movieId);
+    if (movie) {
+      movie.view_count = (movie.view_count || 0) + 1;
+      this.saveMovies(movies);
+    }
+  },
+
+  incrementDownloadCount(movieId: string): void {
+    const movies = this.getMovies();
+    const movie = movies.find((m) => m.id === movieId);
+    if (movie) {
+      movie.download_count = (movie.download_count || 0) + 1;
+      this.saveMovies(movies);
     }
   },
 
@@ -143,6 +182,38 @@ export const storageService = {
   deleteMultipleMovies(ids: string[]): boolean {
     ids.forEach((id) => this.deleteMovie(id));
     return true;
+  },
+
+  // --- VJS (Customizable Video Jockeys with direct device image uploads) ---
+  getVJs(): VJ[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.VJS);
+      if (!data) return [];
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  },
+
+  saveVJs(vjs: VJ[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.VJS, JSON.stringify(vjs));
+    } catch (e) {
+      console.error('Failed to save VJs to localStorage', e);
+    }
+  },
+
+  addVJ(vj: Omit<VJ, 'id' | 'created_at'>): VJ {
+    const vjs = this.getVJs();
+    const newVj: VJ = {
+      ...vj,
+      id: `vj-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      created_at: new Date().toISOString(),
+    };
+    const updated = [newVj, ...vjs.filter((v) => v.name.toLowerCase() !== vj.name.toLowerCase())];
+    this.saveVJs(updated);
+    return newVj;
   },
 
   // --- CONTINUE WATCHING & PLAYBACK PROGRESS TRACKING ---
@@ -264,7 +335,7 @@ export const storageService = {
     return newReview;
   },
 
-  // --- DOWNLOADS & LOCAL ENCRYPTED ROOM DB ---
+  // --- DOWNLOADS & LOCAL STORAGE DB ---
   getDownloads(): DownloadItem[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.DOWNLOADS);
@@ -304,10 +375,10 @@ export const storageService = {
       status: 'downloading',
       progress: 0,
       current_chunk: 1,
-      total_chunks: 4,
+      total_chunks: 1,
       download_speed_mbps: 18.5,
-      encrypted_key: `AES256_GCM_${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-      local_storage_uri: `content://com.sakanet.provider/encrypted_media/${movie.id}.enc`,
+      encrypted_key: '',
+      local_storage_uri: movie.id,
       started_at: new Date().toISOString(),
     };
 

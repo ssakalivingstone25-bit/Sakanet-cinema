@@ -32,17 +32,17 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           onClick={() => onTabChange('browse')}
           className={`flex flex-col items-center justify-center flex-1 py-1.5 transition-all cursor-pointer relative group ${
             activeTab === 'browse'
-              ? 'text-red-500 font-bold'
+              ? 'text-[#F20D28] font-bold'
               : 'text-zinc-400 hover:text-white'
           }`}
           title="Browse Movies & TV Shows"
         >
           <div className="relative">
-            <Compass className={`w-5 h-5 transition-transform group-hover:scale-110 ${activeTab === 'browse' ? 'stroke-[2.4]' : 'stroke-[1.8]'}`} />
+            <Compass className={`w-5 h-5 transition-transform group-hover:scale-110 ${activeTab === 'browse' ? 'stroke-[2.4] text-[#F20D28]' : 'stroke-[1.8]'}`} />
           </div>
           <span className="text-[11px] mt-1 tracking-tight">Browse</span>
           {activeTab === 'browse' && (
-            <span className="absolute bottom-0 w-8 h-0.5 bg-red-600 rounded-full shadow-[0_0_8px_rgba(229,9,20,0.8)]" />
+            <span className="absolute bottom-0 w-8 h-0.5 bg-[#F20D28] rounded-full shadow-[0_0_8px_rgba(242,13,40,0.8)]" />
           )}
         </button>
 
@@ -51,24 +51,24 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           onClick={() => onTabChange('downloads')}
           className={`flex flex-col items-center justify-center flex-1 py-1.5 transition-all cursor-pointer relative group ${
             activeTab === 'downloads'
-              ? 'text-red-500 font-bold'
+              ? 'text-[#F20D28] font-bold'
               : 'text-zinc-400 hover:text-white'
           }`}
           title="Downloaded Media"
         >
           <div className="relative">
-            <Download className={`w-5 h-5 transition-transform group-hover:scale-110 ${activeTab === 'downloads' ? 'stroke-[2.4]' : 'stroke-[1.8]'}`} />
+            <Download className={`w-5 h-5 transition-transform group-hover:scale-110 ${activeTab === 'downloads' ? 'stroke-[2.4] text-[#F20D28]' : 'stroke-[1.8]'}`} />
             {activeDownloadsCount > 0 ? (
               <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-amber-400 animate-ping" />
             ) : downloadsCount > 0 ? (
-              <span className="absolute -top-1 -right-2 px-1 text-[9px] font-mono rounded-full bg-red-600/90 text-white font-bold">
+              <span className="absolute -top-1 -right-2 px-1 text-[9px] font-mono rounded-full bg-[#F20D28] text-white font-bold">
                 {downloadsCount}
               </span>
             ) : null}
           </div>
           <span className="text-[11px] mt-1 tracking-tight">Downloads</span>
           {activeTab === 'downloads' && (
-            <span className="absolute bottom-0 w-8 h-0.5 bg-red-600 rounded-full shadow-[0_0_8px_rgba(229,9,20,0.8)]" />
+            <span className="absolute bottom-0 w-8 h-0.5 bg-[#F20D28] rounded-full shadow-[0_0_8px_rgba(242,13,40,0.8)]" />
           )}
         </button>
 
@@ -77,61 +77,58 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           onClick={() => onTabChange('settings')}
           className={`flex flex-col items-center justify-center flex-1 py-1.5 transition-all cursor-pointer relative group ${
             activeTab === 'settings'
-              ? 'text-red-500 font-bold'
+              ? 'text-[#F20D28] font-bold'
               : 'text-zinc-400 hover:text-white'
           }`}
           title="App & Streaming Settings"
         >
           <div className="relative">
-            <Settings className={`w-5 h-5 transition-transform group-hover:scale-110 ${activeTab === 'settings' ? 'stroke-[2.4]' : 'stroke-[1.8]'}`} />
+            <Settings className={`w-5 h-5 transition-transform group-hover:scale-110 ${activeTab === 'settings' ? 'stroke-[2.4] text-[#F20D28]' : 'stroke-[1.8]'}`} />
           </div>
           <span className="text-[11px] mt-1 tracking-tight">Settings</span>
           {activeTab === 'settings' && (
-            <span className="absolute bottom-0 w-8 h-0.5 bg-red-600 rounded-full shadow-[0_0_8px_rgba(229,9,20,0.8)]" />
+            <span className="absolute bottom-0 w-8 h-0.5 bg-[#F20D28] rounded-full shadow-[0_0_8px_rgba(242,13,40,0.8)]" />
           )}
         </button>
 
-        {/* 4. Admin Portal Tab (Available to Admin) OR Profile Account Tab */}
-        {isAdmin ? (
-          <button
-            onClick={() => onTabChange('admin')}
-            className={`flex flex-col items-center justify-center flex-1 py-1.5 transition-all cursor-pointer relative group ${
-              activeTab === 'admin'
-                ? 'text-red-500 font-bold'
-                : 'text-red-400/80 hover:text-red-300'
-            }`}
-            title="Administrator Control Center"
-          >
-            <div className="relative">
-              <ShieldAlert className={`w-5 h-5 transition-transform group-hover:scale-110 ${activeTab === 'admin' ? 'stroke-[2.4]' : 'stroke-[1.8]'}`} />
-              <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            </div>
-            <span className="text-[11px] mt-1 tracking-tight font-semibold">Admin</span>
-            {activeTab === 'admin' && (
-              <span className="absolute bottom-0 w-8 h-0.5 bg-red-600 rounded-full shadow-[0_0_8px_rgba(229,9,20,0.8)]" />
+        {/* 4. Account Tab */}
+        <button
+          onClick={() => {
+            if (isAdmin && activeTab !== 'admin') {
+              onTabChange('admin');
+            } else {
+              onOpenAuth();
+            }
+          }}
+          className={`flex flex-col items-center justify-center flex-1 py-1.5 transition-all cursor-pointer relative group ${
+            activeTab === 'admin'
+              ? 'text-[#F20D28] font-bold'
+              : 'text-zinc-400 hover:text-white'
+          }`}
+          title={isAdmin ? 'Account & Administrator Control' : 'User Profile & Account'}
+        >
+          <div className="relative">
+            {user?.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt={user.name || 'User'}
+                referrerPolicy="no-referrer"
+                className={`w-5 h-5 rounded-full object-cover border transition-transform group-hover:scale-110 ${
+                  activeTab === 'admin' ? 'border-[#F20D28]' : 'border-white/20'
+                }`}
+              />
+            ) : (
+              <User className={`w-5 h-5 transition-transform group-hover:scale-110 ${activeTab === 'admin' ? 'stroke-[2.4] text-[#F20D28]' : 'stroke-[1.8]'}`} />
             )}
-          </button>
-        ) : (
-          <button
-            onClick={onOpenAuth}
-            className="flex flex-col items-center justify-center flex-1 py-1.5 transition-all cursor-pointer relative group text-zinc-400 hover:text-white"
-            title="User Profile"
-          >
-            <div className="relative">
-              {user?.avatar_url ? (
-                <img
-                  src={user.avatar_url}
-                  alt={user.name || 'User'}
-                  referrerPolicy="no-referrer"
-                  className="w-5 h-5 rounded-full object-cover border border-white/20 group-hover:border-red-500"
-                />
-              ) : (
-                <User className="w-5 h-5 stroke-[1.8] group-hover:scale-110 transition-transform" />
-              )}
-            </div>
-            <span className="text-[11px] mt-1 tracking-tight">Account</span>
-          </button>
-        )}
+            {isAdmin && (
+              <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-[#F20D28] animate-pulse" />
+            )}
+          </div>
+          <span className="text-[11px] mt-1 tracking-tight">Account</span>
+          {activeTab === 'admin' && (
+            <span className="absolute bottom-0 w-8 h-0.5 bg-[#F20D28] rounded-full shadow-[0_0_8px_rgba(242,13,40,0.8)]" />
+          )}
+        </button>
       </div>
     </nav>
   );

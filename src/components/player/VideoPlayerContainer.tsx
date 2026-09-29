@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw, Lock, Unlock } from 'lucide-react';
 import { Movie, VideoPlayerState } from '../../types';
 import { storageService } from '../../services/storageService';
 import { mediaDB } from '../../services/mediaDB';
@@ -19,8 +19,6 @@ interface VideoPlayerContainerProps {
 
 const FALLBACK_STREAM =
   'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
-const SECONDARY_STREAM =
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
 
 export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   movie,
@@ -33,7 +31,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Initialize with stream source
+  // Stream source
   const [resolvedStreamUrl, setResolvedStreamUrl] = useState<string>(() => {
     if (movie?.file_url && !movie.file_url.startsWith('blob:')) {
       return movie.file_url;
@@ -43,7 +41,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
 
   const [streamError, setStreamError] = useState<string | null>(null);
 
-  // Core Playback state
+  // Playback state
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [currentTime, setCurrentTime] = useState<number>(initialTime);
   const [duration, setDuration] = useState<number>(0);
@@ -52,7 +50,16 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-  // Quality, Subtitles, Audio track state matching reference
+  // Landscape and Orientation Lock State
+  const [isLandscapeLocked, setIsLandscapeLocked] = useState<boolean>(false);
+  const [isDeviceLandscape, setIsDeviceLandscape] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth > window.innerHeight;
+    }
+    return false;
+  });
+
+  // Settings & feedback state
   const [currentQuality, setCurrentQuality] = useState<string>('1080p');
   const [currentSubtitle, setCurrentSubtitle] = useState<string>('Off');
   const [currentAudioTrack, setCurrentAudioTrack] = useState<string>('Default (Stereo)');
@@ -63,13 +70,12 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     return storageService.getUser().watchlist.includes(movie.id);
   });
 
-  // Settings flyout state
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 3200);
   };
 
   // 1. Resolve Stream Source
@@ -121,7 +127,42 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     };
   }, [movie]);
 
-  // 2. Play / Pause Toggle
+  // 2. Auto-rotate to Full Landscape View when device turns horizontal
+  useEffect(() => {
+    const handleOrientationOrResize = async () => {
+      const isLandscape = window.innerWidth > window.innerHeight;
+      setIsDeviceLandscape(isLandscape);
+
+      // If user rotates phone horizontally, automatically enter fullscreen landscape mode
+      if (isLandscape && !document.fullscreenElement && containerRef.current) {
+        try {
+          if (containerRef.current.requestFullscreen) {
+            await containerRef.current.requestFullscreen();
+          } else if ((containerRef.current as any).webkitRequestFullscreen) {
+            await (containerRef.current as any).webkitRequestFullscreen();
+          }
+          setIsFullscreen(true);
+
+          // Attempt screen orientation lock if available in browser
+          if (screen.orientation && (screen.orientation as any).lock) {
+            (screen.orientation as any).lock('landscape').catch(() => {});
+          }
+        } catch (e) {
+          console.warn('Auto landscape fullscreen request notice:', e);
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleOrientationOrResize);
+    window.addEventListener('orientationchange', handleOrientationOrResize);
+
+    return () => {
+      window.removeEventListener('resize', handleOrientationOrResize);
+      window.removeEventListener('orientationchange', handleOrientationOrResize);
+    };
+  }, []);
+
+  // 3. Play / Pause Toggle
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
@@ -143,15 +184,15 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     }
   }, [movie, onProgressUpdated]);
 
-  // 3. Seek to time
-  const handleSeek = useCallback((time: number) => {
+  // 4. Seek
+  const handleSeek = useCallback((targetTime: number) => {
     if (!videoRef.current) return;
-    const target = Math.max(0, Math.min(videoRef.current.duration || 0, time));
+    const target = Math.max(0, Math.min(targetTime, videoRef.current.duration || 99999));
     videoRef.current.currentTime = target;
     setCurrentTime(target);
   }, []);
 
-  // 4. Volume & Mute Management
+  // 5. Volume & Mute
   const handleVolumeChange = useCallback((vol: number) => {
     setVolume(vol);
     if (videoRef.current) {
@@ -173,27 +214,74 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     }
   }, [isMuted, volume]);
 
-  // 5. Fullscreen Toggle
-  const toggleFullscreen = useCallback(() => {
+  // 6. Fullscreen & Landscape Locking
+  const toggleFullscreen = useCallback(async () => {
     const elem = containerRef.current || document.documentElement;
     if (!document.fullscreenElement) {
-      if (elem.requestFullscreen) {
-        elem.requestFullscreen().catch(() => {});
-      } else if ((elem as any).webkitRequestFullscreen) {
-        (elem as any).webkitRequestFullscreen();
+      try {
+        if (elem.requestFullscreen) {
+          await elem.requestFullscreen();
+        } else if ((elem as any).webkitRequestFullscreen) {
+          (elem as any).webkitRequestFullscreen();
+        }
+        setIsFullscreen(true);
+        // Lock landscape on mobile
+        if (screen.orientation && (screen.orientation as any).lock) {
+          (screen.orientation as any).lock('landscape').catch(() => {});
+          setIsLandscapeLocked(true);
+        }
+      } catch (err) {
+        console.warn('Fullscreen request failed:', err);
       }
-      setIsFullscreen(true);
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-      } else if ((document as any).webkitExitFullscreen) {
-        (document as any).webkitExitFullscreen();
+      try {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen();
+        }
+        setIsFullscreen(false);
+        if (screen.orientation && (screen.orientation as any).unlock) {
+          (screen.orientation as any).unlock();
+          setIsLandscapeLocked(false);
+        }
+      } catch (err) {
+        console.warn('Exit fullscreen notice:', err);
       }
-      setIsFullscreen(false);
     }
   }, []);
 
-  // 6. Picture-in-Picture / MiniPlayer
+  // Manual Landscape Lock Button
+  const toggleLandscapeLock = useCallback(async () => {
+    if (!isLandscapeLocked) {
+      try {
+        if (!document.fullscreenElement && containerRef.current) {
+          if (containerRef.current.requestFullscreen) {
+            await containerRef.current.requestFullscreen();
+          } else if ((containerRef.current as any).webkitRequestFullscreen) {
+            (containerRef.current as any).webkitRequestFullscreen();
+          }
+          setIsFullscreen(true);
+        }
+        if (screen.orientation && (screen.orientation as any).lock) {
+          await (screen.orientation as any).lock('landscape');
+        }
+        setIsLandscapeLocked(true);
+        showToast('Landscape view locked');
+      } catch {
+        setIsLandscapeLocked(true);
+        showToast('Orientation fixed to Landscape');
+      }
+    } else {
+      if (screen.orientation && (screen.orientation as any).unlock) {
+        (screen.orientation as any).unlock();
+      }
+      setIsLandscapeLocked(false);
+      showToast('Landscape lock released');
+    }
+  }, [isLandscapeLocked]);
+
+  // 7. Picture-in-Picture
   const handleTogglePiP = useCallback(async () => {
     setShowSettings(false);
     if (!videoRef.current || !movie) return;
@@ -222,69 +310,101 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     }
   }, [movie, onEnterMiniPlayer, onProgressUpdated]);
 
-  // 7. Download Video File (Real file download to device storage)
+  // 8. Download Video File
   const handleDownload = useCallback(() => {
     setShowSettings(false);
     if (!movie) return;
     downloadEngine.triggerDownload(movie);
-    showToast(`Downloading "${movie.title}" to device storage...`);
+    showToast(`Downloading "${movie.title}" for offline playback...`);
   }, [movie]);
 
-  // 8. Open Settings Menu Handler
+  // 9. Open Settings Menu Handler
   const handleOpenSettingsMenu = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setShowSettings((prev) => !prev);
   }, []);
 
-  // 9. Subtitles Toggle shortcut
+  // 10. Subtitles Toggle shortcut
   const handleToggleSubtitles = useCallback(() => {
     setCurrentSubtitle((prev) => (prev === 'Off' ? 'English [CC]' : 'Off'));
     showToast(currentSubtitle === 'Off' ? 'Subtitles: English [CC]' : 'Subtitles: Off');
   }, [currentSubtitle]);
 
-  // 10. Toolbar Action Handlers
+  // 11. Toolbar Action Handlers
   const handleToggleMyList = useCallback(() => {
     if (!movie) return;
     const inList = storageService.toggleWatchlist(movie.id);
     setIsInMyList(inList);
     showToast(inList ? 'Added to My List' : 'Removed from My List');
-    onProgressUpdated?.();
-  }, [movie, onProgressUpdated]);
+  }, [movie]);
 
   const handleLike = useCallback(() => {
-    setIsLiked((prev) => !prev);
-    if (!isLiked) setIsDisliked(false);
-    showToast(!isLiked ? 'Marked as Liked' : 'Like removed');
-  }, [isLiked]);
+    setIsLiked((prev) => {
+      const next = !prev;
+      if (next) setIsDisliked(false);
+      showToast(next ? 'Liked film' : 'Removed like');
+      return next;
+    });
+  }, []);
 
   const handleDislike = useCallback(() => {
-    setIsDisliked((prev) => !prev);
-    if (!isDisliked) setIsLiked(false);
-    showToast(!isDisliked ? 'Marked as Disliked' : 'Dislike removed');
-  }, [isDisliked]);
+    setIsDisliked((prev) => {
+      const next = !prev;
+      if (next) setIsLiked(false);
+      showToast(next ? 'Disliked film' : 'Removed dislike');
+      return next;
+    });
+  }, []);
 
   const handleShare = useCallback(() => {
     if (navigator.share && movie) {
-      navigator.share({
-        title: movie.title,
-        text: `Watch ${movie.title} on Sakanet Cinema`,
-        url: window.location.href,
-      }).catch(() => {});
+      navigator
+        .share({
+          title: movie.title,
+          text: `Watch "${movie.title}" on Sakanet Cinema`,
+          url: window.location.href,
+        })
+        .catch(() => {});
     } else {
       navigator.clipboard?.writeText(window.location.href);
-      showToast('Link copied to clipboard!');
+      showToast('Movie link copied to clipboard!');
     }
   }, [movie]);
 
-  const handleReport = useCallback(() => {
-    setShowSettings(false);
-    showToast('Feedback & issue report submitted to administrator.');
+  // Time update listener
+  const handleTimeUpdate = useCallback(() => {
+    if (!videoRef.current) return;
+    setCurrentTime(videoRef.current.currentTime);
   }, []);
 
-  // Keyboard Shortcuts Listener
+  const handleLoadedMetadata = useCallback(() => {
+    if (!videoRef.current) return;
+    setDuration(videoRef.current.duration);
+
+    if (initialTime > 0 && initialTime < videoRef.current.duration) {
+      videoRef.current.currentTime = initialTime;
+      setCurrentTime(initialTime);
+    }
+
+    videoRef.current
+      .play()
+      .then(() => setIsPlaying(true))
+      .catch(() => setIsPlaying(false));
+  }, [initialTime]);
+
+  const handleVideoError = () => {
+    if (resolvedStreamUrl !== FALLBACK_STREAM) {
+      setResolvedStreamUrl(FALLBACK_STREAM);
+      showToast('Switched to master high-definition backup stream');
+    } else {
+      setStreamError('Playback failed. Please check network connection or master video file.');
+    }
+  };
+
+  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
+      if ((e.target as HTMLElement).tagName === 'INPUT') return;
 
       switch (e.key) {
         case ' ':
@@ -374,64 +494,6 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     onClose();
   }, [movie, onClose, onProgressUpdated]);
 
-  useEffect(() => {
-    return () => {
-      if (movie && videoRef.current) {
-        storageService.saveWatchProgress(
-          movie.id,
-          videoRef.current.currentTime,
-          videoRef.current.duration || movie.duration_minutes * 60
-        );
-        onProgressUpdated?.();
-      }
-    };
-  }, [movie, onProgressUpdated]);
-
-  // Fullscreen change listener
-  useEffect(() => {
-    const onFsChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', onFsChange);
-    document.addEventListener('webkitfullscreenchange', onFsChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', onFsChange);
-      document.removeEventListener('webkitfullscreenchange', onFsChange);
-    };
-  }, []);
-
-  // Video Event Handlers
-  const handleTimeUpdate = () => {
-    if (!videoRef.current) return;
-    setCurrentTime(videoRef.current.currentTime);
-  };
-
-  const handleLoadedMetadata = () => {
-    setStreamError(null);
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration || (movie?.duration_minutes || 0) * 60);
-      if (initialTime > 0) {
-        videoRef.current.currentTime = initialTime;
-      }
-      videoRef.current
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
-    }
-  };
-
-  const handleVideoError = () => {
-    if (resolvedStreamUrl !== FALLBACK_STREAM && resolvedStreamUrl !== SECONDARY_STREAM) {
-      setResolvedStreamUrl(FALLBACK_STREAM);
-      setStreamError(null);
-    } else if (resolvedStreamUrl === FALLBACK_STREAM) {
-      setResolvedStreamUrl(SECONDARY_STREAM);
-      setStreamError(null);
-    } else {
-      setStreamError('Playback failed. Please check network connection or master video file.');
-    }
-  };
-
   if (!movie) return null;
 
   const playerState: VideoPlayerState = {
@@ -445,12 +507,14 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   };
 
   const availableQualities = movie.video_qualities || ['4K UHD', '1080p', '720p', '480p'];
-  const availableSubtitles = movie.subtitles || ['English [CC]', 'Spanish', 'French'];
+  const availableSubtitles = movie.subtitles || ['English [CC]', 'Luganda', 'French'];
   const availableAudioTracks = movie.audio_tracks || [
     'Default (Stereo)',
-    'English [Dolby Atmos 5.1]',
-    'Original Soundtrack',
+    'Luganda [VJ Translation]',
+    'Original English',
   ];
+
+  const vjLabel = movie.vj_name || movie.director || 'VJ Junior';
 
   return (
     <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-0 select-none">
@@ -460,7 +524,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       >
         {/* Toast Alert */}
         {toastMessage && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-red-600/90 backdrop-blur-md text-white text-xs font-semibold px-4 py-2 rounded-full shadow-2xl animate-in fade-in slide-in-from-top-2">
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-purple-700/90 backdrop-blur-md text-white text-xs font-semibold px-4 py-2 rounded-full shadow-2xl animate-in fade-in slide-in-from-top-2 border border-purple-400/40">
             {toastMessage}
           </div>
         )}
@@ -504,33 +568,56 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
                 setStreamError(null);
                 setResolvedStreamUrl(FALLBACK_STREAM);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold shadow-lg transition-all cursor-pointer"
+              className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Retry Stream</span>
+              <span>Retry Playback</span>
             </button>
           </div>
         )}
 
-        {/* Comprehensive Controls Overlay Matching Screenshot */}
+        {/* Floating Quick Landscape Lock Toggle Button */}
+        <div className="absolute top-4 right-16 sm:right-24 z-40">
+          <button
+            onClick={toggleLandscapeLock}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-md transition-all shadow-lg cursor-pointer ${
+              isLandscapeLocked
+                ? 'bg-red-600 text-white border border-red-400'
+                : 'bg-black/60 hover:bg-black/85 text-zinc-300 border border-white/20'
+            }`}
+            title="Lock Landscape Orientation"
+          >
+            {isLandscapeLocked ? (
+              <>
+                <Lock className="w-3 h-3 text-red-200" />
+                <span>Locked 16:9</span>
+              </>
+            ) : (
+              <>
+                <Unlock className="w-3 h-3 text-zinc-400" />
+                <span className="hidden sm:inline">Auto Rotate</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Controls Overlay (Ghost style, bold highlight on click, auto-fade, only pauses on center icon) */}
         <ControlsOverlay
           state={playerState}
           movieTitle={movie.title}
-          studioName={movie.director ? `${movie.director} Cinema` : 'Sakanet Originals'}
-          categoryTag={movie.genre ? `${movie.genre} Feature` : 'Cinema Movie'}
+          studioName={vjLabel}
+          categoryTag={movie.genre}
           currentQuality={currentQuality}
+          currentSubtitle={currentSubtitle}
           isSubtitlesActive={currentSubtitle !== 'Off'}
           onPlayPause={togglePlay}
           onSeek={handleSeek}
-          onOpenSettingsMenu={handleOpenSettingsMenu}
-          onOpenQualityMenu={handleOpenSettingsMenu}
-          onToggleSubtitles={handleToggleSubtitles}
+          onVolumeChange={handleVolumeChange}
+          onToggleMute={toggleMute}
           onToggleFullscreen={toggleFullscreen}
+          onOpenSettingsMenu={handleOpenSettingsMenu}
+          onToggleSubtitles={handleToggleSubtitles}
           onClose={handleCloseWithSave}
-          onNextEpisode={() => {
-            showToast('Starting next title...');
-            handleSeek(0);
-          }}
           onToggleMyList={handleToggleMyList}
           isInMyList={isInMyList}
           onLike={handleLike}
@@ -540,21 +627,20 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           onShare={handleShare}
         />
 
-        {/* Floating Settings Flyout Menu Matching Screenshot Options */}
+        {/* Settings Flyout Modal */}
         {showSettings && (
           <SettingsMenu
             onClose={() => setShowSettings(false)}
+            currentSpeed={playbackSpeed}
+            onSpeedChange={(speed) => {
+              setPlaybackSpeed(speed);
+              showToast(`Playback speed: ${speed}x`);
+            }}
             currentQuality={currentQuality}
             availableQualities={availableQualities}
             onQualityChange={(q) => {
               setCurrentQuality(q);
-              showToast(`Quality set to ${q}`);
-            }}
-            currentSpeed={playbackSpeed}
-            onSpeedChange={(speed) => {
-              setPlaybackSpeed(speed);
-              if (videoRef.current) videoRef.current.playbackRate = speed;
-              showToast(`Speed set to ${speed}x`);
+              showToast(`Stream quality: ${q}`);
             }}
             currentSubtitle={currentSubtitle}
             availableSubtitles={availableSubtitles}
@@ -564,14 +650,17 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
             }}
             currentAudioTrack={currentAudioTrack}
             availableAudioTracks={availableAudioTracks}
-            onAudioTrackChange={(trk) => {
-              setCurrentAudioTrack(trk);
-              showToast(`Audio track: ${trk}`);
+            onAudioTrackChange={(track) => {
+              setCurrentAudioTrack(track);
+              showToast(`Audio Track: ${track}`);
             }}
             isPiPEnabled={false}
             onTogglePiP={handleTogglePiP}
             onDownload={handleDownload}
-            onReport={handleReport}
+            onReport={() => {
+              setShowSettings(false);
+              showToast('Thank you for reporting. Issue flagged to admin.');
+            }}
           />
         )}
       </div>

@@ -48,7 +48,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   const completedDownloads = downloads.filter((d) => d.status === 'completed');
 
   return (
-    <header className="sticky top-0 z-40 bg-[#09090b]/90 backdrop-blur-md border-b border-white/10 px-4 md:px-12 py-3.5 select-none transition-all">
+    <header
+      className={`sticky top-0 z-40 bg-[#09090b]/90 backdrop-blur-md border-b border-white/10 px-4 md:px-12 py-3.5 select-none transition-all ${
+        activeTab === 'browse' ? 'hidden md:block' : 'block'
+      }`}
+    >
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         {/* Zone 1: Brand Wordmark (Single Text Element in Display Face) */}
         <div className="flex items-center gap-6">
@@ -84,7 +88,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'text-zinc-400'
               }`}
             >
-              <span>Encrypted Downloads</span>
+              <span>Downloads</span>
               {activeDownloads.length > 0 ? (
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
               ) : completedDownloads.length > 0 ? (

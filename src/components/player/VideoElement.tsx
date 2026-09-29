@@ -54,7 +54,6 @@ export const VideoElement = forwardRef<HTMLVideoElement, VideoElementProps>(
         webkit-playsinline="true"
         x5-playsinline="true"
         preload="auto"
-        crossOrigin="anonymous"
         controls={false}
         disablePictureInPicture={false}
         onTimeUpdate={onTimeUpdate}

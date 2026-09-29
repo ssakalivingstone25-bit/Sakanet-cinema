@@ -233,7 +233,7 @@ export const AuthGateScreen: React.FC<AuthGateScreenProps> = ({ onAuthenticated 
             <div className="p-2.5 bg-zinc-900/50 border border-white/5 rounded-xl flex items-center gap-2.5">
               <HardDriveDownload className="w-4 h-4 text-amber-400 shrink-0" />
               <div className="text-[11px] leading-tight">
-                <span className="text-zinc-200 font-semibold block">Encrypted Offline</span>
+                <span className="text-zinc-200 font-semibold block">Offline Viewing</span>
                 <span className="text-zinc-500 text-[10px]">Download &amp; watch</span>
               </div>
             </div>

@@ -286,14 +286,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       <div className="bg-[#141418] border border-white/10 rounded-2xl p-5 mb-5 shadow-xl space-y-4">
         <div className="flex items-center gap-2 text-xs font-bold text-red-500 uppercase tracking-wider">
           <HardDrive className="w-4 h-4" />
-          <span>Storage & Offline Encrypted Media</span>
+          <span>Offline Downloads & Cache</span>
         </div>
 
         <div className="flex items-center justify-between py-1">
           <div>
             <div className="text-sm font-semibold text-white">Downloaded Movies Size</div>
             <div className="text-xs text-zinc-400">
-              {downloads.filter((d) => d.status === 'completed').length} titles stored in IndexedDB
+              {downloads.filter((d) => d.status === 'completed').length} titles stored locally
             </div>
           </div>
           <span className="font-mono text-xs font-bold text-amber-400">
@@ -324,7 +324,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               className="flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-red-400 py-1 transition-colors cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear Offline Downloads Storage</span>
+              <span>Clear Offline Downloads</span>
             </button>
           )}
         </div>

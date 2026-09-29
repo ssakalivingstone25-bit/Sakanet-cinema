@@ -1,8 +1,18 @@
 export type DownloadPermission = 'free' | 'premium' | 'vip';
 
+export interface VJ {
+  id: string;
+  name: string;
+  avatar_url: string;
+  bio?: string;
+  genres?: string;
+  created_at: string;
+}
+
 export interface Movie {
   id: string;
   title: string;
+  original_title?: string;
   synopsis: string;
   genre: string;
   secondary_genre?: string;
@@ -11,14 +21,27 @@ export interface Movie {
   rating: number; // e.g. 4.8
   review_count: number;
   file_url: string; // streaming source
-  thumbnail_url: string; // poster portrait
-  banner_url: string; // wide hero/landscape
+  thumbnail_url: string; // poster portrait 2:3
+  banner_url: string; // wide hero/landscape 16:9
   download_permission: DownloadPermission;
   file_size_mb: number;
   is_active: boolean; // if false, hidden from live feed
   is_featured?: boolean;
+  is_trending?: boolean;
+  is_recently_added?: boolean;
+  age_rating?: string; // e.g. 16+, 18+, PG-13, All
+  language?: string; // e.g. English, Luganda
+  country?: string; // e.g. Uganda, USA
+  movie_type?: 'Movie' | 'Series' | 'Animation';
+  accent_color?: string;
   director: string;
+  vj_name?: string;
+  vj_avatar_url?: string;
+  vj_bio?: string;
+  view_count?: number;
+  download_count?: number;
   cast: string[];
+  keywords?: string[];
   video_qualities: ('4K UHD' | '1080p FHD' | '720p HD' | '480p SD')[];
   audio_tracks: string[];
   subtitles: string[];

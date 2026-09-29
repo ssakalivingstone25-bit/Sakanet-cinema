@@ -31,6 +31,7 @@ import {
   deleteMovieFromFirestore,
   deleteMultipleMoviesFromFirestore,
 } from '../services/firebase';
+import { AddMovieUploadModal } from './AddMovieUploadModal';
 
 interface AdminPortalViewProps {
   movies: Movie[];
@@ -60,21 +61,6 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
   // Description / Edit Modal state
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-
-  // Form Fields for Description Editing
-  const [formTitle, setFormTitle] = useState('');
-  const [formSynopsis, setFormSynopsis] = useState('');
-  const [formGenre, setFormGenre] = useState('Action');
-  const [formSecondaryGenre, setFormSecondaryGenre] = useState('');
-  const [formReleaseYear, setFormReleaseYear] = useState(new Date().getFullYear());
-  const [formDurationMinutes, setFormDurationMinutes] = useState(120);
-  const [formDirector, setFormDirector] = useState('Livingstone Saka');
-  const [formCast, setFormCast] = useState('Lead Actor, Supporting Cast');
-  const [formDownloadPermission, setFormDownloadPermission] =
-    useState<DownloadPermission>('free');
-  const [formIsFeatured, setFormIsFeatured] = useState(false);
-  const [formVideoUrl, setFormVideoUrl] = useState('');
-  const [formPosterUrl, setFormPosterUrl] = useState('');
 
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -163,15 +149,22 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
 
       // Create new movie in "Awaiting Publication" state
       const finalPoster = pendingPosterDataUrl || thumbnailDataUrl;
+      const initialVj = 'VJ Junior';
+      const initialVjAvatar =
+        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=240&auto=format&fit=crop&q=80';
+
       const newMovie = storageService.addMovie({
         title: fileNameClean,
         synopsis: 'Awaiting administrator plot description and synopsis.',
         genre: 'Action',
-        secondary_genre: 'Cinema Master',
         release_year: new Date().getFullYear(),
         duration_minutes: durationMinutes,
-        director: 'Livingstone Saka',
-        cast: ['Lead Performer', 'Supporting Cast'],
+        director: initialVj,
+        vj_name: initialVj,
+        vj_avatar_url: initialVjAvatar,
+        view_count: 0,
+        download_count: 0,
+        cast: ['Lead Performer'],
         file_url: objectUrl,
         thumbnail_url: finalPoster,
         banner_url: finalPoster,
@@ -180,7 +173,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
         is_active: false, // In Awaiting Publication
         is_featured: false,
         video_qualities: ['4K UHD', '1080p FHD', '720p HD'],
-        audio_tracks: ['English [Dolby Atmos 5.1]'],
+        audio_tracks: ['Luganda [VJ Translation]', 'English [Stereo]'],
         subtitles: ['English [CC]'],
       });
 
@@ -221,53 +214,10 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // Open description modal for a movie
+  // Open edit modal for a movie
   const openEditModal = (movie: Movie) => {
     setEditingMovie(movie);
-    setFormTitle(movie.title);
-    setFormSynopsis(movie.synopsis);
-    setFormGenre(movie.genre);
-    setFormSecondaryGenre(movie.secondary_genre || '');
-    setFormReleaseYear(movie.release_year);
-    setFormDurationMinutes(movie.duration_minutes);
-    setFormDirector(movie.director);
-    setFormCast(movie.cast.join(', '));
-    setFormDownloadPermission(movie.download_permission);
-    setFormIsFeatured(!!movie.is_featured);
-    setFormVideoUrl(movie.file_url || '');
-    setFormPosterUrl(movie.thumbnail_url || '');
     setShowEditModal(true);
-  };
-
-  const handleSaveDescription = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingMovie || !formTitle.trim()) return;
-
-    const castArray = formCast
-      .split(',')
-      .map((c) => c.trim())
-      .filter(Boolean);
-
-    const updated = storageService.updateMovie(editingMovie.id, {
-      title: formTitle.trim(),
-      synopsis: formSynopsis.trim(),
-      genre: formGenre,
-      secondary_genre: formSecondaryGenre.trim(),
-      release_year: formReleaseYear,
-      duration_minutes: formDurationMinutes,
-      director: formDirector.trim(),
-      cast: castArray.length ? castArray : ['Cast Member'],
-      download_permission: formDownloadPermission,
-      is_featured: formIsFeatured,
-      file_url: formVideoUrl.trim() || editingMovie.file_url,
-      thumbnail_url: formPosterUrl.trim() || editingMovie.thumbnail_url,
-      banner_url: formPosterUrl.trim() || editingMovie.banner_url || editingMovie.thumbnail_url,
-    });
-
-    if (updated) saveMovieToFirestore(updated);
-    onMoviesChanged();
-    setShowEditModal(false);
-    showToast(`Updated descriptions for "${formTitle}"`);
   };
 
   // Publish a movie directly to Live Platform
@@ -416,24 +366,16 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
               onChange={handleDevicePosterSelected}
             />
 
-            {/* Upload Video From Device Button */}
+            {/* Add / Upload Movie Button (Opens new comprehensive upload modal) */}
             <button
-              onClick={() => videoInputRef.current?.click()}
-              disabled={isProcessingFile}
-              className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs md:text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-red-700/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => {
+                setEditingMovie(null);
+                setShowEditModal(true);
+              }}
+              className="flex items-center gap-2 bg-[#F20D28] hover:bg-[#d60b23] text-white font-bold text-xs md:text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-red-700/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
-              <Upload className="w-4 h-4" />
-              <span>{isProcessingFile ? 'Processing...' : 'Upload Movie from Device'}</span>
-            </button>
-
-            {/* Optional Custom Poster Button */}
-            <button
-              onClick={() => posterInputRef.current?.click()}
-              className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 text-xs font-semibold px-3 py-2.5 rounded-xl transition-colors cursor-pointer"
-              title="Optionally pick a custom poster art file from your device"
-            >
-              <ImageIcon className="w-4 h-4 text-cyan-400" />
-              <span className="hidden sm:inline">Set Poster Art</span>
+              <Plus className="w-4 h-4" />
+              <span>Add / Upload Movie</span>
             </button>
           </div>
         </div>
@@ -657,12 +599,17 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
                             >
                               {movie.title}
                             </span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[10px] font-semibold bg-red-950/80 text-red-300 border border-red-800/40 px-1.5 py-0.5 rounded">
+                                {movie.vj_name || movie.director || 'VJ Junior'}
+                              </span>
+                              <span className="text-[10px] text-zinc-500 font-mono">
+                                ID: {movie.id}
+                              </span>
+                            </div>
                             <p className="text-[11px] text-zinc-400 line-clamp-1 max-w-sm mt-0.5">
                               {movie.synopsis || 'No description added yet.'}
                             </p>
-                            <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
-                              ID: {movie.id}
-                            </span>
                           </div>
                         </div>
                       </td>
@@ -791,291 +738,22 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
         </div>
       )}
 
-      {/* DESCRIPTION & METADATA EDIT MODAL */}
-      {showEditModal && editingMovie && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-[#141418] border border-white/10 rounded-2xl shadow-2xl p-6 my-auto text-zinc-200">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-amber-400 font-mono tracking-wider block">
-                  Awaiting Publication Details
-                </span>
-                <h2 className="text-xl font-bold font-display text-white">
-                  Add / Edit Movie Descriptions
-                </h2>
-              </div>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="p-1 rounded-full text-zinc-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-xs text-zinc-400 mb-5">
-              Refine the title, plot synopsis, genres, and cast before publishing to the live Sakanet audience.
-            </p>
-
-            <form onSubmit={handleSaveDescription} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">Movie Title</label>
-                  <input
-                    type="text"
-                    required
-                    value={formTitle}
-                    onChange={(e) => setFormTitle(e.target.value)}
-                    className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-red-500 font-semibold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">Director</label>
-                  <input
-                    type="text"
-                    value={formDirector}
-                    onChange={(e) => setFormDirector(e.target.value)}
-                    className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-red-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 mb-1 font-medium">
-                  Plot Synopsis & Description (Required)
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={formSynopsis}
-                  onChange={(e) => setFormSynopsis(e.target.value)}
-                  placeholder="Enter the full synopsis and storyline for this movie..."
-                  className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-red-500 leading-relaxed"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">Primary Genre</label>
-                  <select
-                    value={formGenre}
-                    onChange={(e) => setFormGenre(e.target.value)}
-                    className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-red-500"
-                  >
-                    <option value="Action">Action</option>
-                    <option value="Sci-Fi">Sci-Fi</option>
-                    <option value="Thriller">Thriller</option>
-                    <option value="Drama">Drama</option>
-                    <option value="Crime">Crime</option>
-                    <option value="Horror">Horror</option>
-                    <option value="Adventure">Adventure</option>
-                    <option value="Comedy">Comedy</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">Sub-Genre</label>
-                  <input
-                    type="text"
-                    value={formSecondaryGenre}
-                    onChange={(e) => setFormSecondaryGenre(e.target.value)}
-                    placeholder="e.g. Cyberpunk"
-                    className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-red-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">Release Year</label>
-                  <input
-                    type="number"
-                    value={formReleaseYear}
-                    onChange={(e) => setFormReleaseYear(Number(e.target.value))}
-                    className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-red-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">Runtime (min)</label>
-                  <input
-                    type="number"
-                    value={formDurationMinutes}
-                    onChange={(e) => setFormDurationMinutes(Number(e.target.value))}
-                    className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-red-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 mb-1 font-medium">Cast Members (comma separated)</label>
-                <input
-                  type="text"
-                  value={formCast}
-                  onChange={(e) => setFormCast(e.target.value)}
-                  placeholder="e.g. Lead Star, Co-Star, Villain"
-                  className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-red-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center pt-2">
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">Download Permission Tier</label>
-                  <select
-                    value={formDownloadPermission}
-                    onChange={(e) => setFormDownloadPermission(e.target.value as DownloadPermission)}
-                    className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-red-500"
-                  >
-                    <option value="free">Free Tier (All Users)</option>
-                    <option value="premium">Premium Pro</option>
-                    <option value="vip">VIP Only</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-2 pt-4">
-                  <input
-                    type="checkbox"
-                    id="edit_featured_cb"
-                    checked={formIsFeatured}
-                    onChange={(e) => setFormIsFeatured(e.target.checked)}
-                    className="w-4 h-4 accent-red-600 rounded cursor-pointer"
-                  />
-                  <label htmlFor="edit_featured_cb" className="text-zinc-300 font-medium cursor-pointer">
-                    Feature on Hero Spotlight Banner
-                  </label>
-                </div>
-              </div>
-
-              {/* Direct Cloud Media Sources */}
-              <div className="space-y-3 pt-2 border-t border-white/5">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-zinc-400 font-medium">Cloud Video Stream URL</label>
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                      <span className="text-zinc-500">Presets:</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormVideoUrl(
-                            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4'
-                          )
-                        }
-                        className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px]"
-                      >
-                        4K Sci-Fi
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormVideoUrl(
-                            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
-                          )
-                        }
-                        className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px]"
-                      >
-                        4K Action
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormVideoUrl(
-                            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4'
-                          )
-                        }
-                        className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px]"
-                      >
-                        4K Master
-                      </button>
-                    </div>
-                  </div>
-                  <input
-                    type="url"
-                    value={formVideoUrl}
-                    onChange={(e) => setFormVideoUrl(e.target.value)}
-                    placeholder="https://.../video.mp4"
-                    className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white font-mono text-[11px] focus:outline-none focus:border-red-500"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-zinc-400 font-medium">Cover Art / Poster Image</label>
-                    <label className="cursor-pointer flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300 font-semibold bg-red-950/40 px-2 py-0.5 rounded border border-red-800/40">
-                      <ImageIcon className="w-3.5 h-3.5" />
-                      <span>Upload Cover from Device</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (evt) => {
-                              const dataUrl = evt.target?.result as string;
-                              setFormPosterUrl(dataUrl);
-                              showToast('Cover image attached from device!');
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <input
-                    type="text"
-                    value={formPosterUrl.startsWith('data:') ? 'Attached from Device (Image File)' : formPosterUrl}
-                    onChange={(e) => setFormPosterUrl(e.target.value)}
-                    placeholder="Upload from device or enter image URL"
-                    className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2.5 text-white font-mono text-[11px] focus:outline-none focus:border-red-500"
-                  />
-                  {formPosterUrl && (
-                    <div className="mt-2 flex items-center gap-3 p-2 bg-zinc-900/60 rounded-xl border border-white/5">
-                      <img
-                        src={formPosterUrl}
-                        alt="Poster preview"
-                        className="w-12 h-16 object-cover rounded-lg border border-white/10"
-                      />
-                      <span className="text-[11px] text-zinc-400">Attached Poster Preview</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl font-medium"
-                >
-                  Cancel
-                </button>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white font-semibold rounded-xl transition-colors"
-                  >
-                    Save Descriptions
-                  </button>
-
-                  {!editingMovie.is_active && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleSaveDescription({ preventDefault: () => {} } as any);
-                        handlePublishMovie(editingMovie);
-                      }}
-                      className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl shadow-lg shadow-emerald-700/30 transition-all hover:scale-105"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>Save & Publish Live</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* COMPREHENSIVE ADD / EDIT MOVIE UPLOAD MODAL */}
+      <AddMovieUploadModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingMovie(null);
+        }}
+        editingMovie={editingMovie}
+        onSaved={(savedMovie) => {
+          saveMovieToFirestore(savedMovie);
+          onMoviesChanged();
+          setShowEditModal(false);
+          setEditingMovie(null);
+          showToast(`"${savedMovie.title}" successfully saved!`);
+        }}
+      />
     </div>
   );
 };

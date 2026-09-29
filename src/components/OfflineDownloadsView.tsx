@@ -69,80 +69,70 @@ export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = ({
     storageService.removeDownload(id);
   };
 
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
   const handleClearAll = () => {
-    if (window.confirm('Purge all offline encrypted movie chunks and free storage?')) {
-      storageService.clearAllDownloads();
-    }
+    storageService.clearAllDownloads();
+    setShowClearConfirm(false);
   };
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-8 py-8 space-y-6">
       {/* Top Banner */}
-      <div className="bg-[#121216] border border-white/10 rounded-xl p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-[#121216] border border-white/10 rounded-2xl p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="w-2 h-2 rounded-full bg-red-600 inline-block" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#F20D28] inline-block shadow-[0_0_8px_#F20D28]" />
             <h1 className="text-2xl font-bold font-display text-white tracking-tight">
               Downloaded Movies
             </h1>
           </div>
           <p className="text-xs text-zinc-400 max-w-xl">
-            Directly saved movies to your device storage. Playable inside browser or external media players anytime.
+            Watch your downloaded movies offline anytime without an active internet connection.
           </p>
         </div>
+
+        {downloads.length > 0 && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-zinc-400 font-mono">
+              {downloads.length} {downloads.length === 1 ? 'movie' : 'movies'} ({(totalDownloadedMb / 1024).toFixed(2)} GB)
+            </span>
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-800/40 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Clear All</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Storage Quota & Stats Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Storage Bar */}
-        <div className="md:col-span-2 bg-[#121216] border border-white/10 rounded-xl p-5 space-y-3">
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 text-zinc-300 font-semibold">
-              <HardDrive className="w-4 h-4 text-red-500" />
-              <span>Encrypted Device Storage</span>
-            </div>
-            <span className="font-mono text-zinc-400">
-              {(totalDownloadedMb / 1024).toFixed(2)} GB / {(user.download_quota_limit_mb / 1024).toFixed(1)} GB ({quotaUsedPercent}%)
-            </span>
-          </div>
-
-          <div className="w-full h-3 bg-zinc-900 rounded-full overflow-hidden p-0.5 border border-white/5">
-            <div
-              className="h-full bg-gradient-to-r from-red-600 to-amber-500 rounded-full transition-all duration-500"
-              style={{ width: `${quotaUsedPercent}%` }}
-            />
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] text-zinc-500">
-            <span>Storage: Device Local Media Storage</span>
-            {downloads.length > 0 && (
+      {/* In-App Confirmation Modal for Clear All */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[#121216] border border-white/15 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+            <h3 className="text-base font-bold text-white">Clear All Downloads?</h3>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              This will remove all downloaded movies from your offline library. You can download them again anytime.
+            </p>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 cursor-pointer"
+              >
+                Cancel
+              </button>
               <button
                 onClick={handleClearAll}
-                className="text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors"
+                className="px-4 py-2 rounded-xl bg-[#F20D28] hover:bg-red-600 text-xs font-bold text-white shadow-lg cursor-pointer"
               >
-                <Trash2 className="w-3 h-3" /> Clear All Media
+                Clear Downloads
               </button>
-            )}
-          </div>
-        </div>
-
-        {/* Media Storage Policy */}
-        <div className="bg-[#121216] border border-white/10 rounded-xl p-5 flex flex-col justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-              <ShieldCheck className="w-4 h-4" />
-              <span>Full Video Files</span>
             </div>
-            <p className="text-[11px] text-zinc-400">
-              Downloaded videos are saved directly to your device storage as standard .mp4 files for easy offline watching anywhere.
-            </p>
-          </div>
-          <div className="pt-2 text-[10px] font-mono text-zinc-500 border-t border-white/5 flex items-center justify-between">
-            <span>Format: MP4 High Definition</span>
-            <span className="text-zinc-400 font-semibold">1080p / 720p</span>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Filter Tabs */}
       <div className="flex items-center justify-between border-b border-white/10 pb-2">
@@ -308,7 +298,7 @@ export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = ({
                           document.body.removeChild(a);
                         }}
                         className="p-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg border border-white/10 transition-colors"
-                        title="Save MP4 file to device storage"
+                        title="Save MP4 Video File"
                       >
                         <Download className="w-4 h-4 text-emerald-400" />
                       </button>
@@ -319,7 +309,7 @@ export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = ({
                       <button
                         onClick={() => handlePauseResume(item.id, item.status)}
                         className="p-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg border border-white/10 transition-colors"
-                        title={isDownloading ? 'Pause chunk download' : 'Resume download'}
+                        title={isDownloading ? 'Pause download' : 'Resume download'}
                       >
                         {isDownloading ? (
                           <Pause className="w-4 h-4 text-amber-400" />
@@ -333,7 +323,7 @@ export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = ({
                     <button
                       onClick={() => handleDelete(item.id)}
                       className="p-2 bg-zinc-900 hover:bg-red-950/60 hover:text-red-400 text-zinc-400 rounded-lg border border-white/10 transition-colors"
-                      title="Remove from device storage"
+                      title="Remove Download"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

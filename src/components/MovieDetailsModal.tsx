@@ -327,11 +327,13 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                 </div>
               </div>
 
-              {/* Right Column: Cast, Director, File Quota */}
+              {/* Right Column: Cast, VJ Name, File Quota */}
               <div className="space-y-4 border-t md:border-t-0 md:border-l border-white/10 md:pl-6 text-xs">
                 <div>
-                  <span className="text-zinc-500 block mb-1">Director</span>
-                  <span className="text-white font-medium text-sm">{movie.director}</span>
+                  <span className="text-zinc-500 block mb-1">VJ</span>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-950/60 border border-red-800/40 text-red-300 font-bold text-sm">
+                    <span>{movie.vj_name || movie.director || 'VJ Junior'}</span>
+                  </div>
                 </div>
 
                 <div>
