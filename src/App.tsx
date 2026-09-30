@@ -24,6 +24,7 @@ import {
   checkRedirectResult,
   subscribeToFirestoreMovies,
 } from './services/firebase';
+import { apiService } from './services/apiService';
 import {
   Tv,
   Smartphone,
@@ -65,8 +66,21 @@ export default function App() {
 
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  // Initial load & subscription to download engine and Firebase Auth
+  // Initial load & subscription to download engine, SQLite backend, and Firebase Auth
   useEffect(() => {
+    // 1. Apply stored theme preference to HTML root
+    try {
+      const savedTheme = localStorage.getItem('sakanet_theme') || 'dark';
+      const root = document.documentElement;
+      root.classList.remove('dark', 'light', 'oled');
+      if (savedTheme === 'system') {
+        const isSysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        root.classList.add(isSysDark ? 'dark' : 'light');
+      } else {
+        root.classList.add(savedTheme);
+      }
+    } catch {}
+
     refreshCatalog();
 
     // Check if returning from a Google OAuth redirect
@@ -115,16 +129,29 @@ export default function App() {
     };
   }, []);
 
-  const refreshCatalog = () => {
+  const refreshCatalog = async () => {
+    // 1. Instant local render
     const allMovies = storageService.getMovies();
     setMovies(allMovies);
     setUser(storageService.getUser());
     refreshWatchProgress();
 
+    // 2. Fetch persistent SQLite database from server
+    try {
+      const serverMovies = await apiService.getMovies();
+      if (Array.isArray(serverMovies)) {
+        storageService.saveMovies(serverMovies);
+        setMovies(serverMovies);
+      }
+    } catch (err) {
+      console.warn('Server movies sync notice:', err);
+    }
+
     // If an open movie was deleted, close players/modals
-    setSelectedMovie((prev) => (prev && !allMovies.some((m) => m.id === prev.id) ? null : prev));
-    setPlayingMovie((prev) => (prev && !allMovies.some((m) => m.id === prev.id) ? null : prev));
-    setMiniPlayer((prev) => (prev && !allMovies.some((m) => m.id === prev.movie.id) ? null : prev));
+    const currentList = storageService.getMovies();
+    setSelectedMovie((prev) => (prev && !currentList.some((m) => m.id === prev.id) ? null : prev));
+    setPlayingMovie((prev) => (prev && !currentList.some((m) => m.id === prev.id) ? null : prev));
+    setMiniPlayer((prev) => (prev && !currentList.some((m) => m.id === prev.movie.id) ? null : prev));
   };
 
   const refreshWatchProgress = () => {

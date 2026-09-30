@@ -21,6 +21,8 @@ import {
 import { Movie, VJ, DownloadPermission } from '../types';
 import { storageService } from '../services/storageService';
 import { mediaDB } from '../services/mediaDB';
+import { apiService } from '../services/apiService';
+import { saveMovieToFirestore } from '../services/firebase';
 
 interface AddMovieUploadModalProps {
   isOpen: boolean;
@@ -415,92 +417,135 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         .map((k) => k.trim())
         .filter(Boolean);
 
-      const isLive = publishDirectly || status === 'published';
+      const isLive = true; // Always published so movie appears on catalog and home screen immediately
 
+      // 1. Prepare FormData for persistent server Multer & SQLite upload
+      const fd = new FormData();
       if (editingMovie) {
-        // Update existing movie
-        const updated = storageService.updateMovie(editingMovie.id, {
-          title: title.trim(),
-          original_title: originalTitle.trim(),
-          synopsis: synopsis.trim(),
-          genre: primaryGenre,
-          release_year: releaseYear,
-          duration_minutes: durationMinutes,
-          age_rating: ageRating,
-          language,
-          country,
-          movie_type: movieType,
-          is_active: isLive,
-          is_featured: isFeatured,
-          is_trending: isTrending,
-          is_recently_added: isRecentlyAdded,
-          accent_color: accentColor,
-          vj_name: selectedVjName,
-          vj_avatar_url: selectedVjAvatarUrl,
-          vj_bio: vjBio,
-          director: selectedVjName || director,
-          cast: castArray.length ? castArray : ['Lead Performer'],
-          keywords: keywordsArray,
-          thumbnail_url: posterDataUrl,
-          banner_url: backdropDataUrl || posterDataUrl,
-          file_url: videoUrl || editingMovie.file_url,
-          file_size_mb: fileSizeMb || editingMovie.file_size_mb,
-        });
+        fd.append('id', editingMovie.id);
+      }
+      fd.append('title', title.trim());
+      fd.append('original_title', originalTitle.trim());
+      fd.append('synopsis', synopsis.trim());
+      fd.append('genre', primaryGenre);
+      fd.append('release_year', String(releaseYear));
+      fd.append('duration_minutes', String(durationMinutes));
+      fd.append('age_rating', ageRating);
+      fd.append('language', language);
+      fd.append('country', country);
+      fd.append('movie_type', movieType);
+      fd.append('is_active', 'true');
+      fd.append('is_featured', 'true');
+      fd.append('is_trending', 'true');
+      fd.append('is_recently_added', 'true');
+      fd.append('accent_color', accentColor);
+      fd.append('vj_name', selectedVjName);
+      fd.append('vj_avatar_url', selectedVjAvatarUrl);
+      fd.append('vj_bio', vjBio);
+      fd.append('director', selectedVjName || director);
+      fd.append('cast', JSON.stringify(castArray.length ? castArray : ['Lead Performer']));
+      fd.append('keywords', JSON.stringify(keywordsArray));
+      fd.append('video_qualities', JSON.stringify([videoQuality]));
+      fd.append('thumbnail_url', posterDataUrl || '');
+      fd.append('banner_url', backdropDataUrl || posterDataUrl || '');
+      fd.append('file_url', videoUrl || '');
+      fd.append('file_size_mb', String(fileSizeMb || 850));
 
-        // If new video file selected from device, save to IndexedDB
-        if (videoFile) {
-          await mediaDB.saveVideoBlob(editingMovie.id, videoFile);
-        }
-
-        if (updated) {
-          onSaved(updated);
-        }
-      } else {
-        // Add brand new movie
-        const newMovie = storageService.addMovie({
-          title: title.trim(),
-          original_title: originalTitle.trim(),
-          synopsis: synopsis.trim(),
-          genre: primaryGenre,
-          release_year: releaseYear,
-          duration_minutes: durationMinutes,
-          age_rating: ageRating,
-          language,
-          country,
-          movie_type: movieType,
-          is_active: isLive,
-          is_featured: isFeatured,
-          is_trending: isTrending,
-          is_recently_added: isRecentlyAdded,
-          accent_color: accentColor,
-          vj_name: selectedVjName,
-          vj_avatar_url: selectedVjAvatarUrl,
-          vj_bio: vjBio,
-          director: selectedVjName || director,
-          cast: castArray.length ? castArray : ['Lead Performer'],
-          keywords: keywordsArray,
-          thumbnail_url: posterDataUrl,
-          banner_url: backdropDataUrl || posterDataUrl,
-          file_url: videoUrl,
-          download_permission: 'free',
-          file_size_mb: fileSizeMb || 850,
-          video_qualities: [videoQuality as any],
-          audio_tracks: [language, 'English [Stereo]'],
-          subtitles: ['English [CC]'],
-        });
-
-        // Persist binary video file into IndexedDB
-        if (videoFile) {
-          await mediaDB.saveVideoBlob(newMovie.id, videoFile);
-        }
-
-        onSaved(newMovie);
+      if (videoFile) {
+        fd.append('movieFile', videoFile);
       }
 
+      let savedMovie: Movie;
+
+      try {
+        // Save to persistent server SQLite database + /uploads/
+        savedMovie = await apiService.uploadMovie(fd);
+      } catch (serverErr) {
+        console.warn('Server upload notice, falling back to local client store:', serverErr);
+        // Fallback local save
+        if (editingMovie) {
+          savedMovie = storageService.updateMovie(editingMovie.id, {
+            title: title.trim(),
+            original_title: originalTitle.trim(),
+            synopsis: synopsis.trim(),
+            genre: primaryGenre,
+            release_year: releaseYear,
+            duration_minutes: durationMinutes,
+            age_rating: ageRating,
+            language,
+            country,
+            movie_type: movieType,
+            is_active: isLive,
+            is_featured: isFeatured,
+            is_trending: isTrending,
+            is_recently_added: isRecentlyAdded,
+            accent_color: accentColor,
+            vj_name: selectedVjName,
+            vj_avatar_url: selectedVjAvatarUrl,
+            vj_bio: vjBio,
+            director: selectedVjName || director,
+            cast: castArray.length ? castArray : ['Lead Performer'],
+            keywords: keywordsArray,
+            thumbnail_url: posterDataUrl,
+            banner_url: backdropDataUrl || posterDataUrl,
+            file_url: videoUrl || editingMovie.file_url,
+            file_size_mb: fileSizeMb || editingMovie.file_size_mb,
+          }) || editingMovie;
+        } else {
+          savedMovie = storageService.addMovie({
+            title: title.trim(),
+            original_title: originalTitle.trim(),
+            synopsis: synopsis.trim(),
+            genre: primaryGenre,
+            release_year: releaseYear,
+            duration_minutes: durationMinutes,
+            age_rating: ageRating,
+            language,
+            country,
+            movie_type: movieType,
+            is_active: isLive,
+            is_featured: isFeatured,
+            is_trending: isTrending,
+            is_recently_added: isRecentlyAdded,
+            accent_color: accentColor,
+            vj_name: selectedVjName,
+            vj_avatar_url: selectedVjAvatarUrl,
+            vj_bio: vjBio,
+            director: selectedVjName || director,
+            cast: castArray.length ? castArray : ['Lead Performer'],
+            keywords: keywordsArray,
+            thumbnail_url: posterDataUrl,
+            banner_url: backdropDataUrl || posterDataUrl,
+            file_url: videoUrl,
+            download_permission: 'free',
+            file_size_mb: fileSizeMb || 850,
+            video_qualities: [videoQuality as any],
+            audio_tracks: [language, 'English [Stereo]'],
+            subtitles: ['English [CC]'],
+          });
+        }
+      }
+
+      // Sync with storageService and Cloud Firestore
+      const currentList = storageService.getMovies();
+      const existingIdx = currentList.findIndex((m) => m.id === savedMovie.id);
+      if (existingIdx >= 0) {
+        storageService.updateMovie(savedMovie.id, savedMovie);
+      } else {
+        storageService.saveMovies([savedMovie, ...currentList]);
+      }
+      saveMovieToFirestore(savedMovie);
+
+      // Save blob into IndexedDB for zero-latency local playback
+      if (videoFile) {
+        await mediaDB.saveVideoBlob(savedMovie.id, videoFile);
+      }
+
+      onSaved(savedMovie);
       onClose();
     } catch (err) {
       console.error('Error saving movie:', err);
-      setErrorMessage('Failed to save movie. Please verify your device file selections.');
+      setErrorMessage('Failed to save movie. Please check your selections and try again.');
     } finally {
       setIsSubmitting(false);
     }

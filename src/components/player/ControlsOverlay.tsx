@@ -129,6 +129,14 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
       return;
     }
 
+    if (!state.isPlaying) {
+      // When paused, tapping anywhere starts playback!
+      onPlayPause();
+      triggerFeedback('play');
+      resetHideTimer();
+      return;
+    }
+
     if (controlsVisible) {
       setControlsVisible(false);
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -359,10 +367,48 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
           <span>{formatTime(state.duration)}</span>
         </div>
 
-        {/* Secondary Bottom Toolbar (Next Episode, Add to My List, Like, Dislike, Share, Full Screen) */}
+        {/* Secondary Bottom Toolbar (Play/Pause, Mute, Next Episode, Add to My List, Like, Dislike, Share, Full Screen) */}
         <div className="flex items-center justify-between pt-2.5 text-white">
           {/* Left Actions */}
-          <div className="flex items-center gap-6 sm:gap-8">
+          <div className="flex items-center gap-4 sm:gap-6">
+            {/* Bottom Play / Pause Button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPlayPause();
+                triggerFeedback(!state.isPlaying ? 'play' : 'pause');
+                resetHideTimer();
+              }}
+              className="px-2.5 py-1.5 text-white hover:text-red-400 bg-white/10 hover:bg-white/20 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+              title={state.isPlaying ? 'Pause' : 'Play'}
+              aria-label={state.isPlaying ? 'Pause' : 'Play'}
+            >
+              {state.isPlaying ? (
+                <Pause className="w-4 h-4 fill-current" />
+              ) : (
+                <Play className="w-4 h-4 fill-current ml-0.5" />
+              )}
+              <span className="text-xs font-bold">{state.isPlaying ? 'Pause' : 'Play'}</span>
+            </button>
+
+            {/* Volume / Mute Button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleMute();
+                resetHideTimer();
+              }}
+              className="p-1.5 text-white hover:text-red-400 bg-white/10 hover:bg-white/20 rounded-lg transition-all cursor-pointer flex items-center"
+              title={state.isMuted ? 'Unmute' : 'Mute'}
+              aria-label={state.isMuted ? 'Unmute' : 'Mute'}
+            >
+              {state.isMuted ? (
+                <VolumeX className="w-4 h-4" />
+              ) : (
+                <Volume2 className="w-4 h-4" />
+              )}
+            </button>
+
             {/* Next Episode */}
             <button
               onClick={() => {

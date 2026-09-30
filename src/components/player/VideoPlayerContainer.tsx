@@ -17,8 +17,7 @@ interface VideoPlayerContainerProps {
   onProgressUpdated?: () => void;
 }
 
-const FALLBACK_STREAM =
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
+const FALLBACK_STREAM = '/movies/cinema-master-stream.mp4';
 
 export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   movie,
@@ -31,15 +30,20 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Helper to extract primary video URL from movie
+  const getDirectMovieStream = (m: Movie | null): string => {
+    if (!m) return FALLBACK_STREAM;
+    const direct = m.file_url || (m as any).videoUrl || (m.filename ? `/movies/${m.filename}` : '');
+    return direct || FALLBACK_STREAM;
+  };
+
   // Stream source
   const [resolvedStreamUrl, setResolvedStreamUrl] = useState<string>(() => {
-    if (movie?.file_url && !movie.file_url.startsWith('blob:')) {
-      return movie.file_url;
-    }
-    return FALLBACK_STREAM;
+    return getDirectMovieStream(movie);
   });
 
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [isBuffering, setIsBuffering] = useState<boolean>(false);
 
   // Playback state
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
@@ -87,27 +91,27 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       setStreamError(null);
 
       try {
+        const directUrl = movie.file_url || (movie as any).videoUrl || (movie.filename ? `/movies/${movie.filename}` : '');
+
+        // 1. Direct stream URL (e.g. /movies/... or https://...)
+        if (directUrl && !directUrl.startsWith('blob:')) {
+          if (!isCancelled) {
+            setResolvedStreamUrl(directUrl);
+            return;
+          }
+        }
+
+        // 2. Persistent IndexedDB Blob cache
         const indexedDbUrl = await mediaDB.getVideoBlobUrl(movie.id);
         if (indexedDbUrl && !isCancelled) {
           setResolvedStreamUrl(indexedDbUrl);
           return;
         }
 
-        if (movie.file_url) {
-          if (movie.file_url.startsWith('blob:')) {
-            try {
-              const res = await fetch(movie.file_url, { method: 'HEAD' });
-              if (res.ok && !isCancelled) {
-                setResolvedStreamUrl(movie.file_url);
-                return;
-              }
-            } catch {}
-          } else {
-            if (!isCancelled) {
-              setResolvedStreamUrl(movie.file_url);
-              return;
-            }
-          }
+        // 3. Blob URL if still valid
+        if (directUrl && !isCancelled) {
+          setResolvedStreamUrl(directUrl);
+          return;
         }
 
         if (!isCancelled) {
@@ -169,7 +173,14 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       videoRef.current
         .play()
         .then(() => setIsPlaying(true))
-        .catch(() => {});
+        .catch((err) => {
+          console.warn('Playback blocked by browser policy, attempting muted play:', err);
+          if (videoRef.current) {
+            videoRef.current.muted = true;
+            setIsMuted(true);
+            videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+          }
+        });
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
@@ -389,10 +400,14 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     videoRef.current
       .play()
       .then(() => setIsPlaying(true))
-      .catch(() => setIsPlaying(false));
+      .catch((err) => {
+        console.warn('Initial autoplay unmuted blocked by browser policy:', err);
+        setIsPlaying(false);
+      });
   }, [initialTime]);
 
   const handleVideoError = () => {
+    console.warn('Video playback error for URL:', resolvedStreamUrl);
     if (resolvedStreamUrl !== FALLBACK_STREAM) {
       setResolvedStreamUrl(FALLBACK_STREAM);
       showToast('Switched to master high-definition backup stream');
@@ -542,9 +557,10 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
             isMuted={isMuted}
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
-            onWaiting={() => {}}
-            onPlaying={() => {}}
+            onWaiting={() => setIsBuffering(true)}
+            onPlaying={() => setIsBuffering(false)}
             onError={handleVideoError}
+            onClick={togglePlay}
             onEnded={() => {
               setIsPlaying(false);
               storageService.clearWatchProgress(movie.id);
@@ -552,6 +568,13 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
             }}
           />
         ) : null}
+
+        {/* Buffering Indicator */}
+        {isBuffering && (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-30">
+            <div className="w-14 h-14 border-4 border-red-600/40 border-t-red-600 rounded-full animate-spin shadow-2xl" />
+          </div>
+        )}
 
         {/* Playback Error Screen */}
         {streamError && (

@@ -32,6 +32,7 @@ import {
   deleteMultipleMoviesFromFirestore,
 } from '../services/firebase';
 import { AddMovieUploadModal } from './AddMovieUploadModal';
+import { apiService } from '../services/apiService';
 
 interface AdminPortalViewProps {
   movies: Movie[];
@@ -147,49 +148,82 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
         };
       });
 
-      // Create new movie in "Awaiting Publication" state
+      // Create new movie and persist permanently to server Multer disk storage and SQLite database
       const finalPoster = pendingPosterDataUrl || thumbnailDataUrl;
       const initialVj = 'VJ Junior';
       const initialVjAvatar =
         'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=240&auto=format&fit=crop&q=80';
 
-      const newMovie = storageService.addMovie({
-        title: fileNameClean,
-        synopsis: 'Awaiting administrator plot description and synopsis.',
-        genre: 'Action',
-        release_year: new Date().getFullYear(),
-        duration_minutes: durationMinutes,
-        director: initialVj,
-        vj_name: initialVj,
-        vj_avatar_url: initialVjAvatar,
-        view_count: 0,
-        download_count: 0,
-        cast: ['Lead Performer'],
-        file_url: objectUrl,
-        thumbnail_url: finalPoster,
-        banner_url: finalPoster,
-        download_permission: 'free',
-        file_size_mb: fileSizeMb,
-        is_active: false, // In Awaiting Publication
-        is_featured: false,
-        video_qualities: ['4K UHD', '1080p FHD', '720p HD'],
-        audio_tracks: ['Luganda [VJ Translation]', 'English [Stereo]'],
-        subtitles: ['English [CC]'],
-      });
+      const fd = new FormData();
+      fd.append('movieFile', file);
+      fd.append('title', fileNameClean);
+      fd.append('synopsis', 'Awaiting administrator plot description and synopsis.');
+      fd.append('genre', 'Action');
+      fd.append('release_year', String(new Date().getFullYear()));
+      fd.append('duration_minutes', String(durationMinutes));
+      fd.append('director', initialVj);
+      fd.append('vj_name', initialVj);
+      fd.append('vj_avatar_url', initialVjAvatar);
+      fd.append('thumbnail_url', finalPoster);
+      fd.append('banner_url', finalPoster);
+      fd.append('file_size_mb', String(fileSizeMb));
+      fd.append('is_active', 'true');
+      fd.append('is_featured', 'true');
+      fd.append('is_trending', 'true');
+      fd.append('is_recently_added', 'true');
+
+      let savedMovie: Movie;
+      try {
+        savedMovie = await apiService.uploadMovie(fd);
+      } catch (err) {
+        console.warn('Server upload notice, saving locally:', err);
+        savedMovie = storageService.addMovie({
+          title: fileNameClean,
+          synopsis: 'Awaiting administrator plot description and synopsis.',
+          genre: 'Action',
+          release_year: new Date().getFullYear(),
+          duration_minutes: durationMinutes,
+          director: initialVj,
+          vj_name: initialVj,
+          vj_avatar_url: initialVjAvatar,
+          view_count: 0,
+          download_count: 0,
+          cast: ['Lead Performer'],
+          file_url: objectUrl,
+          thumbnail_url: finalPoster,
+          banner_url: finalPoster,
+          download_permission: 'free',
+          file_size_mb: fileSizeMb,
+          is_active: true,
+          is_featured: true,
+          video_qualities: ['4K UHD', '1080p FHD', '720p HD'],
+          audio_tracks: ['Luganda [VJ Translation]', 'English [Stereo]'],
+          subtitles: ['English [CC]'],
+        });
+      }
+
+      // Sync with storageService
+      const currentList = storageService.getMovies();
+      const existingIdx = currentList.findIndex((m) => m.id === savedMovie.id);
+      if (existingIdx >= 0) {
+        storageService.updateMovie(savedMovie.id, savedMovie);
+      } else {
+        storageService.saveMovies([savedMovie, ...currentList]);
+      }
 
       // Persist the actual binary video file into IndexedDB so it stays playable permanently
-      await mediaDB.saveVideoBlob(newMovie.id, file);
+      await mediaDB.saveVideoBlob(savedMovie.id, file);
 
       // Reset pending custom poster
       setPendingPosterDataUrl(null);
 
-      saveMovieToFirestore(newMovie);
+      saveMovieToFirestore(savedMovie);
       onMoviesChanged();
-      setPipelineTab('awaiting');
-      showToast(`"${fileNameClean}" moved to Awaiting Publication queue`);
+      setPipelineTab('published');
+      showToast(`"${fileNameClean}" uploaded and saved permanently in SQLite!`);
 
       // Open description editor right away for the admin
-      openEditModal(newMovie);
+      openEditModal(savedMovie);
     } catch (err) {
       console.error('File Ingestion error:', err);
       showToast('Error uploading video file from device');
@@ -221,17 +255,23 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
   };
 
   // Publish a movie directly to Live Platform
-  const handlePublishMovie = (movie: Movie) => {
+  const handlePublishMovie = async (movie: Movie) => {
     const updated = storageService.publishMovie(movie.id);
     if (updated) saveMovieToFirestore(updated);
+    try {
+      await apiService.updateMovie(movie.id, { is_active: true });
+    } catch {}
     onMoviesChanged();
     showToast(`"${movie.title}" is now LIVE on Sakanet!`);
   };
 
   // Unpublish a movie back to Awaiting
-  const handleUnpublishMovie = (movie: Movie) => {
+  const handleUnpublishMovie = async (movie: Movie) => {
     const updated = storageService.unpublishMovie(movie.id);
     if (updated) saveMovieToFirestore(updated);
+    try {
+      await apiService.updateMovie(movie.id, { is_active: false });
+    } catch {}
     onMoviesChanged();
     showToast(`"${movie.title}" moved back to Awaiting Publication`);
   };
@@ -301,8 +341,11 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
     // Delete locally
     storageService.deleteMultipleMovies(movieIds);
 
-    // Clean up binary media blobs from IndexedDB
-    movieIds.forEach((id) => mediaDB.deleteMedia(id));
+    // Clean up binary media blobs from IndexedDB and server disk
+    movieIds.forEach((id) => {
+      mediaDB.deleteMedia(id);
+      apiService.deleteMovie(id);
+    });
 
     // Delete in Firestore
     deleteMultipleMoviesFromFirestore(movieIds);

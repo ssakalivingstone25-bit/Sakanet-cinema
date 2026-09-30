@@ -13,6 +13,7 @@ interface VideoElementProps {
   onPlaying: () => void;
   onError: (e: React.SyntheticEvent<HTMLVideoElement, Event>) => void;
   onEnded: () => void;
+  onClick?: () => void;
 }
 
 export const VideoElement = forwardRef<HTMLVideoElement, VideoElementProps>(
@@ -30,6 +31,7 @@ export const VideoElement = forwardRef<HTMLVideoElement, VideoElementProps>(
       onPlaying,
       onError,
       onEnded,
+      onClick,
     },
     ref
   ) => {
@@ -62,7 +64,8 @@ export const VideoElement = forwardRef<HTMLVideoElement, VideoElementProps>(
         onPlaying={onPlaying}
         onError={onError}
         onEnded={onEnded}
-        className="w-full h-full object-contain pointer-events-none select-none bg-black"
+        onClick={onClick}
+        className="w-full h-full object-contain pointer-events-auto cursor-pointer select-none bg-black"
       />
     );
   }

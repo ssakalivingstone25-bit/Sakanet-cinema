@@ -30,7 +30,7 @@ interface SettingsViewProps {
   onUserUpdated?: () => void;
 }
 
-export type ThemeOption = 'dark' | 'light' | 'system';
+export type ThemeOption = 'dark' | 'light' | 'oled' | 'system';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   user,
@@ -75,24 +75,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
     // Apply theme to document root
     const root = document.documentElement;
+    root.classList.remove('dark', 'light', 'oled');
+
     if (newTheme === 'dark') {
       root.classList.add('dark');
-      root.classList.remove('light');
     } else if (newTheme === 'light') {
       root.classList.add('light');
-      root.classList.remove('dark');
+    } else if (newTheme === 'oled') {
+      root.classList.add('oled');
     } else {
       // System
       const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (systemDark) {
-        root.classList.add('dark');
-        root.classList.remove('light');
-      } else {
-        root.classList.add('light');
-        root.classList.remove('dark');
-      }
+      root.classList.add(systemDark ? 'dark' : 'light');
     }
-    showToast(`Theme updated to ${newTheme}`);
+    showToast(`Theme updated to ${newTheme.toUpperCase()}`);
   };
 
   const handleQualityChange = (quality: string) => {
@@ -191,19 +187,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <span>Appearance & Theme</span>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {/* Dark Mode */}
           <button
             onClick={() => handleThemeChange('dark')}
             className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all cursor-pointer ${
               theme === 'dark'
-                ? 'bg-red-600/20 border-red-500 text-white'
+                ? 'bg-red-600/20 border-red-500 text-white shadow-lg shadow-red-600/20 ring-1 ring-red-500'
                 : 'bg-zinc-900/60 border-white/10 text-zinc-400 hover:border-white/20 hover:text-white'
             }`}
           >
-            <Moon className="w-5 h-5 mb-1.5" />
-            <span className="text-xs font-semibold">Dark</span>
-            <span className="text-[10px] text-zinc-400">Default Cinema</span>
+            <Moon className="w-5 h-5 mb-1.5 text-red-500" />
+            <span className="text-xs font-semibold">Cinema Dark</span>
+            <span className="text-[10px] text-zinc-400">Midnight Crimson</span>
           </button>
 
           {/* Light Mode */}
@@ -211,13 +207,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onClick={() => handleThemeChange('light')}
             className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all cursor-pointer ${
               theme === 'light'
-                ? 'bg-red-600/20 border-red-500 text-white'
+                ? 'bg-amber-500/20 border-amber-500 text-white shadow-lg shadow-amber-500/20 ring-1 ring-amber-500'
                 : 'bg-zinc-900/60 border-white/10 text-zinc-400 hover:border-white/20 hover:text-white'
             }`}
           >
-            <Sun className="w-5 h-5 mb-1.5" />
-            <span className="text-xs font-semibold">Light</span>
-            <span className="text-[10px] text-zinc-400">Clean High Contrast</span>
+            <Sun className="w-5 h-5 mb-1.5 text-amber-400" />
+            <span className="text-xs font-semibold">Studio Light</span>
+            <span className="text-[10px] text-zinc-400">Crisp High-Contrast</span>
+          </button>
+
+          {/* OLED Black */}
+          <button
+            onClick={() => handleThemeChange('oled')}
+            className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all cursor-pointer ${
+              theme === 'oled'
+                ? 'bg-red-600/20 border-red-500 text-white shadow-lg shadow-red-600/20 ring-1 ring-red-500'
+                : 'bg-zinc-900/60 border-white/10 text-zinc-400 hover:border-white/20 hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-5 h-5 mb-1.5 text-purple-400" />
+            <span className="text-xs font-semibold">OLED Black</span>
+            <span className="text-[10px] text-zinc-400">Pitch Black AMOLED</span>
           </button>
 
           {/* System Default */}
@@ -225,12 +235,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onClick={() => handleThemeChange('system')}
             className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all cursor-pointer ${
               theme === 'system'
-                ? 'bg-red-600/20 border-red-500 text-white'
+                ? 'bg-blue-600/20 border-blue-500 text-white shadow-lg shadow-blue-500/20 ring-1 ring-blue-500'
                 : 'bg-zinc-900/60 border-white/10 text-zinc-400 hover:border-white/20 hover:text-white'
             }`}
           >
-            <Monitor className="w-5 h-5 mb-1.5" />
-            <span className="text-xs font-semibold">System</span>
+            <Monitor className="w-5 h-5 mb-1.5 text-blue-400" />
+            <span className="text-xs font-semibold">Auto System</span>
             <span className="text-[10px] text-zinc-400">Sync with Device</span>
           </button>
         </div>

@@ -19,6 +19,7 @@ import {
 import { Movie, DownloadItem, UserReview } from '../types';
 import { storageService } from '../services/storageService';
 import { downloadEngine } from '../services/downloadEngine';
+import { apiService } from '../services/apiService';
 import {
   saveReviewToFirestore,
   subscribeToMovieReviews,
@@ -62,6 +63,17 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
       setReviewSuccess(false);
       const prog = storageService.getWatchProgressForMovie(movie.id);
       setSavedProgress(prog ? prog.currentTime : 0);
+
+      // Fetch authentic reviews from SQLite server database
+      apiService.getReviews(movie.id).then((serverReviews) => {
+        if (serverReviews && serverReviews.length > 0) {
+          setReviews(serverReviews);
+          const sum = serverReviews.reduce((acc, curr) => acc + curr.rating, 0);
+          const realAvg = Number((sum / serverReviews.length).toFixed(1));
+          movie.rating = realAvg;
+          movie.review_count = serverReviews.length;
+        }
+      });
 
       // Real-time Firestore review synchronization for genuine ratings
       const unsubscribe = subscribeToMovieReviews(movie.id, (firestoreReviews) => {
@@ -123,18 +135,37 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     if (!userComment.trim() || !movie) return;
 
     setSubmittingReview(true);
-    // 1. Save to local storage
+    const currentUser = storageService.getUser();
+
+    // 1. Submit to server SQLite database for genuine rating computation
+    try {
+      const serverResult = await apiService.rateMovie(movie.id, userRating, userComment, {
+        id: currentUser.id,
+        name: currentUser.name,
+        avatar: currentUser.avatar_url,
+      });
+
+      if (serverResult && serverResult.reviews) {
+        setReviews(serverResult.reviews);
+        movie.rating = serverResult.rating;
+        movie.review_count = serverResult.review_count;
+      }
+    } catch (err) {
+      console.warn('Server rate notice, saving locally:', err);
+    }
+
+    // 2. Save to local storage
     const newRev = storageService.addReview(movie.id, userRating, userComment);
     const updatedReviews = [newRev, ...reviews.filter((r) => r.id !== newRev.id)];
     setReviews(updatedReviews);
 
-    // 2. Real-time compute actual rating
+    // 3. Real-time compute actual rating
     const sum = updatedReviews.reduce((acc, curr) => acc + curr.rating, 0);
     const realAvg = Number((sum / updatedReviews.length).toFixed(1));
     movie.rating = realAvg;
     movie.review_count = updatedReviews.length;
 
-    // 3. Persist to Firestore database in real-time
+    // 4. Persist to Firestore database in real-time
     saveReviewToFirestore(newRev);
     updateMovieRatingInFirestore(movie.id, realAvg, updatedReviews.length);
 

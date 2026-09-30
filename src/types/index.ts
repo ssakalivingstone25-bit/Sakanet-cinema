@@ -21,6 +21,8 @@ export interface Movie {
   rating: number; // e.g. 4.8
   review_count: number;
   file_url: string; // streaming source
+  videoUrl?: string; // streamable URL alias
+  filename?: string; // disk storage filename
   thumbnail_url: string; // poster portrait 2:3
   banner_url: string; // wide hero/landscape 16:9
   download_permission: DownloadPermission;
