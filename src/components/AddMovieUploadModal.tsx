@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Trash2,
   Plus,
-  Sparkles,
   Play,
   RotateCcw,
   Check,
@@ -17,8 +16,12 @@ import {
   Eye,
   Sliders,
   ChevronDown,
+  HardDrive,
+  Link as LinkIcon,
+  Smartphone,
+  Sparkles,
 } from 'lucide-react';
-import { Movie, VJ, DownloadPermission } from '../types';
+import { Movie, VJ } from '../types';
 import { storageService } from '../services/storageService';
 import { apiService } from '../services/apiService';
 import { saveMovieToFirestore } from '../services/firebase';
@@ -50,7 +53,6 @@ const PRIMARY_GENRES = [
 
 const AGE_RATINGS = ['All', 'PG-13', '16+', '18+', 'R'];
 const LANGUAGES = ['Luganda [VJ Translation]', 'English', 'Luganda', 'Swahili', 'French'];
-const COUNTRIES = ['Uganda', 'USA', 'UK', 'Nigeria', 'South Africa', 'India'];
 const VIDEO_QUALITIES = ['HD (1080p)', '4K UHD', '720p HD', '480p SD'];
 
 export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
@@ -59,8 +61,19 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
   editingMovie,
   onSaved,
 }) => {
-  // Stepper / navigation tab
+  // Navigation step
   const [activeStepTab, setActiveStepTab] = useState<number>(1);
+
+  // Upload Method: 'file' (direct device upload - default) vs 'url' (external streaming link)
+  const [uploadMethod, setUploadMethod] = useState<'file' | 'url'>('file');
+
+  // Direct Device Files
+  const [movieFile, setMovieFile] = useState<File | null>(null);
+  const [moviePreviewUrl, setMoviePreviewUrl] = useState<string>('');
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const [posterPreviewUrl, setPosterPreviewUrl] = useState<string>('');
+  const [backdropFile, setBackdropFile] = useState<File | null>(null);
+  const [backdropPreviewUrl, setBackdropPreviewUrl] = useState<string>('');
 
   // Section 1: Movie Information
   const [title, setTitle] = useState('');
@@ -78,51 +91,50 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
   const [isTrending, setIsTrending] = useState<boolean>(true);
   const [isRecentlyAdded, setIsRecentlyAdded] = useState<boolean>(true);
 
-  // Section 2: Media URLs (Lightweight string URLs)
+  // Section 2: Media URLs (fallback or edit mode)
   const [posterUrl, setPosterUrl] = useState<string>('');
   const [backdropUrl, setBackdropUrl] = useState<string>('');
-  const [logoDataUrl, setLogoDataUrl] = useState<string>('');
-  const [accentColor, setAccentColor] = useState<string>('#F20D28');
-
-  // Section 3: Video Stream URL
   const [videoUrl, setVideoUrl] = useState<string>('');
   const [fileSizeMb, setFileSizeMb] = useState<number>(850);
-  const [videoResolution, setVideoResolution] = useState<string>('1920x1080');
-  const [videoFormat, setVideoFormat] = useState<string>('MP4');
+  const [accentColor, setAccentColor] = useState<string>('#E50914');
 
-  // Section 4: VJ Assignment
+  // Section 3: VJ Assignment
   const [vjsList, setVjsList] = useState<VJ[]>([]);
   const [selectedVjName, setSelectedVjName] = useState<string>('VJ Junior');
   const [selectedVjAvatarUrl, setSelectedVjAvatarUrl] = useState<string>('');
   const [vjBio, setVjBio] = useState<string>('');
 
-  // Add New VJ Sub-modal/drawer
+  // Add New VJ Drawer/Modal
   const [showAddVjModal, setShowAddVjModal] = useState<boolean>(false);
   const [newVjName, setNewVjName] = useState('');
   const [newVjAvatarUrl, setNewVjAvatarUrl] = useState('');
   const [newVjBio, setNewVjBio] = useState('');
 
-  // Section 5: Genres & Categorization
+  // Section 4: Genres & Categorization
   const [primaryGenre, setPrimaryGenre] = useState<string>('Action');
 
-  // Section 6: Search Metadata
+  // Section 5: Metadata
   const [keywords, setKeywords] = useState<string>('');
   const [cast, setCast] = useState<string>('Lead Performer, Supporting Cast');
   const [director, setDirector] = useState<string>('Livingstone Saka');
 
-  // Hidden File Input Refs
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const newVjAvatarInputRef = useRef<HTMLInputElement>(null);
-  const selectedVjAvatarInputRef = useRef<HTMLInputElement>(null);
-
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Real-time Upload Progress State
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [uploadSpeed, setUploadSpeed] = useState<number>(0);
+  const [uploadLoadedMb, setUploadLoadedMb] = useState<number>(0);
+  const [uploadTotalMb, setUploadTotalMb] = useState<number>(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load VJs and populate form if editing
+  // File Input References
+  const movieFileInputRef = useRef<HTMLInputElement>(null);
+  const posterFileInputRef = useRef<HTMLInputElement>(null);
+  const backdropFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Populate data when modal opens or edits
   useEffect(() => {
     if (!isOpen) return;
 
-    // Load available VJs from storage
     const storedVjs = storageService.getVJs();
     setVjsList(storedVjs);
 
@@ -143,7 +155,6 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
       setIsRecentlyAdded(editingMovie.is_recently_added ?? true);
       setPosterUrl(editingMovie.poster_url || editingMovie.thumbnail_url || '');
       setBackdropUrl(editingMovie.banner_url || '');
-      setAccentColor(editingMovie.accent_color || '#F20D28');
       setVideoUrl(editingMovie.video_url || editingMovie.file_url || '');
       setFileSizeMb(editingMovie.file_size_mb || 850);
       setSelectedVjName(editingMovie.vj_name || 'VJ Junior');
@@ -153,8 +164,9 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
       setCast(editingMovie.cast?.join(', ') || 'Lead Performer');
       setKeywords(editingMovie.keywords?.join(', ') || '');
       setDirector(editingMovie.director || 'Livingstone Saka');
+      setUploadMethod(editingMovie.video_url?.startsWith('http') ? 'url' : 'file');
     } else {
-      // Reset for fresh movie upload
+      // Fresh form reset
       setTitle('');
       setOriginalTitle('');
       setSynopsis('');
@@ -171,10 +183,17 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
       setIsRecentlyAdded(true);
       setPosterUrl('');
       setBackdropUrl('');
-      setLogoDataUrl('');
-      setAccentColor('#F20D28');
       setVideoUrl('');
       setFileSizeMb(850);
+      setMovieFile(null);
+      setMoviePreviewUrl('');
+      setPosterFile(null);
+      setPosterPreviewUrl('');
+      setBackdropFile(null);
+      setBackdropPreviewUrl('');
+      setUploadMethod('file');
+      setUploadProgress(0);
+      setUploadSpeed(0);
       setKeywords('');
       setCast('Lead Performer');
       setDirector('Livingstone Saka');
@@ -194,56 +213,57 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Logo & VJ Image Handlers
-  const handleLogoSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // File Handlers
+  const handleMovieFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      setLogoDataUrl(evt.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+
+    setMovieFile(file);
+    const sizeMb = Math.round((file.size / (1024 * 1024)) * 10) / 10;
+    setFileSizeMb(sizeMb);
+
+    // Auto-suggest title if blank
+    if (!title.trim()) {
+      const baseName = file.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[._\-]/g, ' ')
+        .replace(/\b(1080p|720p|480p|4k|bluray|webrip|x264|x265)\b/gi, '')
+        .trim();
+      setTitle(baseName.charAt(0).toUpperCase() + baseName.slice(1));
+    }
+
+    // Local object URL for instant preview
+    try {
+      if (moviePreviewUrl) URL.revokeObjectURL(moviePreviewUrl);
+      const url = URL.createObjectURL(file);
+      setMoviePreviewUrl(url);
+    } catch {}
   };
 
-  const handleNewVjAvatarSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePosterFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      setNewVjAvatarUrl(evt.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+
+    setPosterFile(file);
+    try {
+      if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl);
+      const url = URL.createObjectURL(file);
+      setPosterPreviewUrl(url);
+    } catch {}
   };
 
-  const handleSelectedVjAvatarSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBackdropFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const dataUrl = evt.target?.result as string;
-      setSelectedVjAvatarUrl(dataUrl);
 
-      // Persist to VJ in storage
-      const vjs = storageService.getVJs();
-      const existing = vjs.find((v) => v.name.toLowerCase() === selectedVjName.toLowerCase());
-      if (existing) {
-        existing.avatar_url = dataUrl;
-        storageService.saveVJs(vjs);
-        setVjsList([...vjs]);
-      } else {
-        storageService.addVJ({
-          name: selectedVjName,
-          avatar_url: dataUrl,
-          bio: vjBio || 'Ugandan VJ Cinema Specialist',
-          genres: primaryGenre,
-        });
-        setVjsList(storageService.getVJs());
-      }
-    };
-    reader.readAsDataURL(file);
+    setBackdropFile(file);
+    try {
+      if (backdropPreviewUrl) URL.revokeObjectURL(backdropPreviewUrl);
+      const url = URL.createObjectURL(file);
+      setBackdropPreviewUrl(url);
+    } catch {}
   };
 
-  // Save New VJ with Device Avatar
   const handleSaveNewVj = () => {
     if (!newVjName.trim()) {
       setErrorMessage('Please enter a name for the new VJ.');
@@ -276,20 +296,34 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
       return;
     }
 
-    if (!videoUrl.trim()) {
-      setErrorMessage('Please paste a Video Stream URL.');
-      setActiveStepTab(2);
-      return;
-    }
-
-    if (!posterUrl.trim()) {
-      setErrorMessage('Please paste a Poster Image URL.');
-      setActiveStepTab(2);
-      return;
+    // Validation based on upload method
+    if (uploadMethod === 'file') {
+      if (!movieFile && !videoUrl.trim() && !editingMovie) {
+        setErrorMessage('Please select a video file from your device.');
+        setActiveStepTab(2);
+        return;
+      }
+      if (!posterFile && !posterUrl.trim() && !posterPreviewUrl && !editingMovie) {
+        setErrorMessage('Please select a movie poster image from your device.');
+        setActiveStepTab(2);
+        return;
+      }
+    } else {
+      if (!videoUrl.trim() && !editingMovie) {
+        setErrorMessage('Please paste a direct video stream link.');
+        setActiveStepTab(2);
+        return;
+      }
+      if (!posterUrl.trim() && !editingMovie) {
+        setErrorMessage('Please paste a poster image link.');
+        setActiveStepTab(2);
+        return;
+      }
     }
 
     setIsSubmitting(true);
     setErrorMessage(null);
+    setUploadProgress(0);
 
     try {
       const castArray = cast
@@ -302,64 +336,106 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         .filter(Boolean);
 
       const isLive = status === 'published' || publishDirectly;
+      const movieId = editingMovie
+        ? editingMovie.id
+        : `movie-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
-      const moviePayload: Movie = {
-        id: editingMovie ? editingMovie.id : `movie-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        title: title.trim(),
-        original_title: originalTitle.trim(),
-        synopsis: synopsis.trim() || 'Awaiting plot synopsis and details.',
-        genre: primaryGenre,
-        release_year: releaseYear,
-        duration_minutes: durationMinutes,
-        rating: editingMovie?.rating || 5.0,
-        review_count: editingMovie?.review_count || 0,
-        video_url: videoUrl.trim(),
-        poster_url: posterUrl.trim(),
-        file_url: videoUrl.trim(),
-        videoUrl: videoUrl.trim(),
-        thumbnail_url: posterUrl.trim(),
-        banner_url: (backdropUrl || posterUrl).trim(),
-        age_rating: ageRating,
-        language,
-        country,
-        movie_type: movieType,
-        is_active: isLive,
-        is_featured: isFeatured,
-        is_trending: isTrending,
-        is_recently_added: isRecentlyAdded,
-        accent_color: accentColor,
-        director: selectedVjName || director,
-        vj_name: selectedVjName,
-        vj_avatar_url: selectedVjAvatarUrl,
-        vj_bio: vjBio,
-        download_permission: 'free',
-        file_size_mb: fileSizeMb || 850,
-        cast: castArray.length ? castArray : ['Lead Performer'],
-        keywords: keywordsArray,
-        video_qualities: [videoQuality as any],
-        audio_tracks: [language, 'English [Stereo]'],
-        subtitles: ['English [CC]'],
-        created_at: editingMovie?.created_at || new Date().toISOString(),
-      };
+      let savedMovie: Movie;
 
-      let savedMovie: Movie = moviePayload;
+      // CASE A: User selected direct device file(s) -> Multipart upload to server disk storage
+      if (movieFile || posterFile || backdropFile) {
+        const formData = new FormData();
+        formData.append('id', movieId);
+        formData.append('title', title.trim());
+        formData.append('original_title', originalTitle.trim());
+        formData.append('synopsis', synopsis.trim() || 'Awaiting plot synopsis and details.');
+        formData.append('genre', primaryGenre);
+        formData.append('release_year', String(releaseYear));
+        formData.append('duration_minutes', String(durationMinutes));
+        formData.append('age_rating', ageRating);
+        formData.append('language', language);
+        formData.append('country', country);
+        formData.append('movie_type', movieType);
+        formData.append('is_active', String(isLive));
+        formData.append('is_featured', String(isFeatured));
+        formData.append('is_trending', String(isTrending));
+        formData.append('is_recently_added', String(isRecentlyAdded));
+        formData.append('vj_name', selectedVjName);
+        formData.append('vj_avatar_url', selectedVjAvatarUrl);
+        formData.append('vj_bio', vjBio);
+        formData.append('director', selectedVjName || director);
+        formData.append('cast', JSON.stringify(castArray.length ? castArray : ['Lead Performer']));
+        formData.append('keywords', JSON.stringify(keywordsArray));
+        formData.append('video_qualities', JSON.stringify([videoQuality]));
+        formData.append('audio_tracks', JSON.stringify([language, 'English [Stereo]']));
+        formData.append('subtitles', JSON.stringify(['English [CC]']));
+        formData.append('file_size_mb', String(fileSizeMb));
 
-      try {
+        // If fallback URLs exist, send them too
+        if (videoUrl) formData.append('video_url', videoUrl);
+        if (posterUrl) formData.append('poster_url', posterUrl);
+        if (backdropUrl) formData.append('banner_url', backdropUrl);
+
+        // Attach actual binary files
+        if (movieFile) formData.append('movieFile', movieFile);
+        if (posterFile) formData.append('posterFile', posterFile);
+        if (backdropFile) formData.append('backdropFile', backdropFile);
+
+        savedMovie = await apiService.uploadMovie(formData, (p) => {
+          setUploadProgress(p.percent);
+          setUploadSpeed(p.speedMbps);
+          setUploadLoadedMb(Math.round((p.loaded / (1024 * 1024)) * 10) / 10);
+          setUploadTotalMb(Math.round((p.total / (1024 * 1024)) * 10) / 10);
+        });
+      } else {
+        // CASE B: Standard JSON URL streaming record
+        const moviePayload: Movie = {
+          id: movieId,
+          title: title.trim(),
+          original_title: originalTitle.trim(),
+          synopsis: synopsis.trim() || 'Awaiting plot synopsis and details.',
+          genre: primaryGenre,
+          release_year: releaseYear,
+          duration_minutes: durationMinutes,
+          rating: editingMovie?.rating || 5.0,
+          review_count: editingMovie?.review_count || 0,
+          video_url: videoUrl.trim(),
+          poster_url: posterUrl.trim(),
+          file_url: videoUrl.trim(),
+          videoUrl: videoUrl.trim(),
+          thumbnail_url: posterUrl.trim(),
+          banner_url: (backdropUrl || posterUrl).trim(),
+          age_rating: ageRating,
+          language,
+          country,
+          movie_type: movieType,
+          is_active: isLive,
+          is_featured: isFeatured,
+          is_trending: isTrending,
+          is_recently_added: isRecentlyAdded,
+          accent_color: accentColor,
+          director: selectedVjName || director,
+          vj_name: selectedVjName,
+          vj_avatar_url: selectedVjAvatarUrl,
+          vj_bio: vjBio,
+          download_permission: 'free',
+          file_size_mb: fileSizeMb || 850,
+          cast: castArray.length ? castArray : ['Lead Performer'],
+          keywords: keywordsArray,
+          video_qualities: [videoQuality as any],
+          audio_tracks: [language, 'English [Stereo]'],
+          subtitles: ['English [CC]'],
+          created_at: editingMovie?.created_at || new Date().toISOString(),
+        };
+
         if (editingMovie) {
           savedMovie = await apiService.updateMovie(editingMovie.id, moviePayload);
         } else {
           savedMovie = await apiService.createMovie(moviePayload);
         }
-      } catch (serverErr) {
-        console.warn('apiService save notice, using payload:', serverErr);
-        if (editingMovie) {
-          savedMovie = storageService.updateMovie(editingMovie.id, moviePayload) || moviePayload;
-        } else {
-          savedMovie = storageService.addMovie(moviePayload);
-        }
       }
 
-      // Sync with storageService and Cloud Firestore
+      // Persist in local storage cache
       const currentList = storageService.getMovies();
       const existingIdx = currentList.findIndex((m) => m.id === savedMovie.id);
       if (existingIdx >= 0) {
@@ -367,13 +443,15 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
       } else {
         storageService.saveMovies([savedMovie, ...currentList]);
       }
-      saveMovieToFirestore(savedMovie);
+
+      // Sync into Cloud Firestore database (ai-studio-sakanet-e2034e9a-6112-4f29-b445-7009f6a22938)
+      await saveMovieToFirestore(savedMovie);
 
       onSaved(savedMovie);
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving movie:', err);
-      setErrorMessage('Failed to save movie. Please check your selections and try again.');
+      setErrorMessage(err.message || 'Failed to upload movie. Please verify your file and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -381,27 +459,28 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-in fade-in">
-      <div className="bg-[#0e0f15] border border-white/10 rounded-2xl w-full max-w-6xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto text-white select-none">
+      <div className="bg-[#0e0f15] border border-white/10 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto text-white select-none">
         {/* ========================================================
-            TOP MODAL HEADER (Matches reference design)
+            TOP MODAL HEADER
            ======================================================== */}
         <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-[#121319]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-950/80 border border-red-700/50 flex items-center justify-center text-[#F20D28] shadow-lg">
+            <div className="w-10 h-10 rounded-xl bg-red-950/80 border border-red-700/50 flex items-center justify-center text-[#E50914] shadow-lg">
               <Film className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-bold font-display text-white tracking-tight flex items-center gap-2">
-                <span>{editingMovie ? 'Edit Movie Details' : 'Add / Upload Movie'}</span>
+                <span>{editingMovie ? 'Edit Movie Details' : 'Upload Movie from Device'}</span>
               </h2>
               <p className="text-xs text-zinc-400 hidden sm:block">
-                Fill in the details below and upload your movie. You can preview how it will appear on the platform before publishing.
+                Upload video files and artwork directly from your device. Files are streamed with HTTP range seeking and synced to Cloud Firestore.
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
+            disabled={isSubmitting}
             className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -409,16 +488,45 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         </div>
 
         {/* ========================================================
-            STEPPER NAVIGATION PILL TABS
+            REAL-TIME UPLOAD PROGRESS BANNER
+           ======================================================== */}
+        {isSubmitting && (
+          <div className="p-4 bg-gradient-to-r from-red-950/90 to-zinc-950 border-b border-red-600/40 space-y-2 animate-in fade-in">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <Upload className="w-4 h-4 text-[#E50914] animate-bounce" />
+                <span className="font-bold text-white">
+                  Uploading Movie &amp; Media to Server Storage...
+                </span>
+                {uploadSpeed > 0 && (
+                  <span className="font-mono text-zinc-400 text-[11px]">
+                    ({uploadSpeed} MB/s)
+                  </span>
+                )}
+              </div>
+              <div className="font-mono font-bold text-[#E50914]">
+                {uploadProgress}% {uploadTotalMb > 0 ? `(${uploadLoadedMb} / ${uploadTotalMb} MB)` : ''}
+              </div>
+            </div>
+
+            <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden border border-white/10">
+              <div
+                className="h-full bg-gradient-to-r from-red-600 to-[#E50914] rounded-full transition-all duration-200"
+                style={{ width: `${Math.max(5, uploadProgress)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            STEPPER NAVIGATION TABS
            ======================================================== */}
         <div className="px-4 py-2 bg-[#0a0b10] border-b border-white/5 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0 text-xs">
           {[
-            { num: 1, label: 'Movie Info' },
-            { num: 2, label: 'Media Files' },
-            { num: 3, label: 'VJ & Genres' },
-            { num: 4, label: 'Browse Placement' },
-            { num: 5, label: 'Search Metadata' },
-            { num: 6, label: 'Publishing' },
+            { num: 1, label: 'Movie Details' },
+            { num: 2, label: 'Video & Poster Files' },
+            { num: 3, label: 'VJ & Genre' },
+            { num: 4, label: 'Placement & Review' },
           ].map((tab) => (
             <button
               key={tab.num}
@@ -426,7 +534,7 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
               onClick={() => setActiveStepTab(tab.num)}
               className={`px-3 py-1.5 rounded-full font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeStepTab === tab.num
-                  ? 'bg-[#F20D28] text-white shadow-md shadow-red-700/40'
+                  ? 'bg-[#E50914] text-white shadow-md shadow-red-700/40'
                   : 'text-zinc-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -445,733 +553,653 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         )}
 
         {/* ========================================================
-            MODAL BODY: 2-COLUMN GRID (Matching Screenshot)
+            MODAL BODY CONTENT
            ======================================================== */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* ========================================================
-                LEFT COLUMN: 1. Movie Information & 3. Video Upload
-               ======================================================== */}
-            <div className="space-y-6">
-              {/* SECTION 1: MOVIE INFORMATION */}
+          {/* STEP 1: MOVIE DETAILS */}
+          {activeStepTab === 1 && (
+            <div className="space-y-4 max-w-3xl mx-auto">
               <div className="bg-[#121319] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-4 shadow-md">
-                <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
-                  <span className="w-6 h-6 rounded-full bg-[#F20D28] text-white flex items-center justify-center text-xs font-bold shadow">
-                    1
-                  </span>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Movie Information
-                  </h3>
-                </div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider pb-2 border-b border-white/5 flex items-center gap-2">
+                  <Film className="w-4 h-4 text-[#E50914]" />
+                  <span>Primary Title &amp; Synopsis</span>
+                </h3>
 
-                <div className="space-y-3.5 text-xs">
-                  {/* Movie Title & Original Title */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-zinc-400 font-medium mb-1">
-                        Movie Title <span className="text-[#F20D28]">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Enter movie title"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        className="w-full bg-[#0a0b10] border border-white/10 rounded-xl px-3 py-2.5 text-white font-semibold focus:outline-none focus:border-[#F20D28]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-zinc-400 font-medium mb-1">
-                        Original Title (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Enter original title"
-                        value={originalTitle}
-                        onChange={(e) => setOriginalTitle(e.target.value)}
-                        className="w-full bg-[#0a0b10] border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-[#F20D28]"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Description / Synopsis */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-zinc-400 font-medium">
-                        Description / Synopsis <span className="text-[#F20D28]">*</span>
-                      </label>
-                      <span className="text-[10px] text-zinc-500 font-mono">
-                        {synopsis.length}/2000
-                      </span >
-                    </div>
-                    <textarea
-                      rows={3}
-                      required
-                      placeholder="Enter movie description or synopsis..."
-                      value={synopsis}
-                      onChange={(e) => setSynopsis(e.target.value)}
-                      maxLength={2000}
-                      className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-3 text-white leading-relaxed focus:outline-none focus:border-[#F20D28]"
-                    />
-                  </div>
-
-                  {/* Year, Runtime, Age Rating */}
-                  <div className="grid grid-cols-3 gap-2.5">
-                    <div>
-                      <label className="block text-zinc-400 font-medium mb-1">Release Year *</label>
-                      <input
-                        type="number"
-                        value={releaseYear}
-                        onChange={(e) => setReleaseYear(Number(e.target.value))}
-                        className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white font-semibold focus:outline-none focus:border-[#F20D28]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-zinc-400 font-medium mb-1">Runtime *</label>
-                      <input
-                        type="number"
-                        placeholder="120 min"
-                        value={durationMinutes}
-                        onChange={(e) => setDurationMinutes(Number(e.target.value))}
-                        className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white font-semibold focus:outline-none focus:border-[#F20D28]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-zinc-400 font-medium mb-1">Age Rating *</label>
-                      <select
-                        value={ageRating}
-                        onChange={(e) => setAgeRating(e.target.value)}
-                        className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#F20D28]"
-                      >
-                        {AGE_RATINGS.map((ar) => (
-                          <option key={ar} value={ar}>
-                            {ar}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Language, Country, Video Quality */}
-                  <div className="grid grid-cols-3 gap-2.5">
-                    <div>
-                      <label className="block text-zinc-400 font-medium mb-1">Language *</label>
-                      <select
-                        value={language}
-                        onChange={(e) => setLanguage(e.target.value)}
-                        className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#F20D28]"
-                      >
-                        {LANGUAGES.map((lang) => (
-                          <option key={lang} value={lang}>
-                            {lang}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-zinc-400 font-medium mb-1">Country *</label>
-                      <select
-                        value={country}
-                        onChange={(e) => setCountry(e.target.value)}
-                        className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#F20D28]"
-                      >
-                        {COUNTRIES.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-zinc-400 font-medium mb-1">Video Quality *</label>
-                      <select
-                        value={videoQuality}
-                        onChange={(e) => setVideoQuality(e.target.value)}
-                        className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#F20D28]"
-                      >
-                        {VIDEO_QUALITIES.map((vq) => (
-                          <option key={vq} value={vq}>
-                            {vq}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Movie Type, Status, Featured Switch */}
-                  <div className="grid grid-cols-3 gap-2.5 items-center">
-                    <div>
-                      <label className="block text-zinc-400 font-medium mb-1">Movie Type *</label>
-                      <select
-                        value={movieType}
-                        onChange={(e) => setMovieType(e.target.value as any)}
-                        className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#F20D28]"
-                      >
-                        <option value="Movie">Movie</option>
-                        <option value="Series">Series</option>
-                        <option value="Animation">Animation</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-zinc-400 font-medium mb-1">Status *</label>
-                      <select
-                        value={status}
-                        onChange={(e) => setStatus(e.target.value as any)}
-                        className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#F20D28]"
-                      >
-                        <option value="published">● Published</option>
-                        <option value="awaiting">○ Awaiting</option>
-                      </select>
-                    </div>
-                    <div className="pt-3">
-                      <label className="flex items-center gap-2 cursor-pointer text-xs">
-                        <input
-                          type="checkbox"
-                          checked={isFeatured}
-                          onChange={(e) => setIsFeatured(e.target.checked)}
-                          className="w-4 h-4 accent-[#F20D28] rounded cursor-pointer"
-                        />
-                        <span className="font-semibold text-zinc-200">Featured Tonight</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Trending and Recently Added Toggles */}
-                  <div className="pt-2 border-t border-white/5 flex items-center gap-6">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isTrending}
-                        onChange={(e) => setIsTrending(e.target.checked)}
-                        className="w-4 h-4 accent-[#F20D28] rounded cursor-pointer"
-                      />
-                      <span className="font-medium text-zinc-300">Show in Trending</span>
-                    </label>
-
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isRecentlyAdded}
-                        onChange={(e) => setIsRecentlyAdded(e.target.checked)}
-                        className="w-4 h-4 accent-[#F20D28] rounded cursor-pointer"
-                      />
-                      <span className="font-medium text-zinc-300">Show in Recently Added</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 3: VIDEO STREAM URL */}
-              <div className="bg-[#121319] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-4 shadow-md">
-                <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
-                  <span className="w-6 h-6 rounded-full bg-[#F20D28] text-white flex items-center justify-center text-xs font-bold shadow">
-                    3
-                  </span>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Video Stream URL
-                  </h3>
-                </div>
-
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-zinc-300 font-semibold text-xs mb-1.5">
-                      Paste Video Stream URL <span className="text-[#F20D28]">*</span>
+                      Movie Title <span className="text-[#E50914]">*</span>
                     </label>
                     <input
-                      type="url"
+                      type="text"
                       required
-                      placeholder="Paste Video Stream URL (e.g. https://domain.com/movie.mp4 or .m3u8)"
-                      value={videoUrl}
-                      onChange={(e) => setVideoUrl(e.target.value)}
-                      className="w-full bg-[#0a0b10] border border-white/15 focus:border-[#F20D28] rounded-xl px-3.5 py-3 text-white text-xs font-mono placeholder:text-zinc-600 focus:outline-none transition-colors shadow-inner"
-                    />
-                    <p className="text-[11px] text-zinc-400 mt-1">
-                      Direct streaming link (MP4, WebM, HLS m3u8, or CDN URL). Heavy binary file uploads are replaced by instant URL streaming.
-                    </p>
-                  </div>
-
-                  {/* Video URL Stream Preview */}
-                  {videoUrl && (
-                    <div className="bg-[#0a0b10] border border-white/10 rounded-xl p-3.5 space-y-2.5 text-xs">
-                      <div className="flex items-center justify-between text-zinc-300">
-                        <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Stream URL Ready</span>
-                        </span>
-                        <span className="text-[11px] text-zinc-500 font-mono truncate max-w-[200px]">
-                          {videoUrl}
-                        </span>
-                      </div>
-
-                      <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-black border border-white/10">
-                        <video
-                          src={videoUrl}
-                          controls
-                          className="w-full h-full object-contain"
-                          onError={() => console.warn('Preview video stream load notice')}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* SECTION 6: SEARCH METADATA */}
-              <div className="bg-[#121319] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-3 shadow-md">
-                <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
-                  <span className="w-6 h-6 rounded-full bg-[#F20D28] text-white flex items-center justify-center text-xs font-bold shadow">
-                    6
-                  </span>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Search Metadata
-                  </h3>
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <label className="block text-zinc-400 font-medium mb-1">
-                      Search Keywords (comma separated)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. action, blockbuster, luganda, war, chase"
-                      value={keywords}
-                      onChange={(e) => setKeywords(e.target.value)}
-                      className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#F20D28]"
+                      placeholder="e.g. Extraction: Kampala Strike"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      className="w-full bg-[#0a0b10] border border-white/15 focus:border-[#E50914] rounded-xl px-3.5 py-2.5 text-white text-xs font-semibold focus:outline-none transition-colors"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-zinc-400 font-medium mb-1">
-                      Lead Actors / Cast Members
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Lead Star, Supporting Actor"
-                      value={cast}
-                      onChange={(e) => setCast(e.target.value)}
-                      className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#F20D28]"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ========================================================
-                RIGHT COLUMN: 2. Poster & Backdrop, 4. VJ Assignment, 5. Genres
-               ======================================================== */}
-            <div className="space-y-6">
-              {/* SECTION 2: POSTER & BACKDROP STREAM URLs */}
-              <div className="bg-[#121319] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-4 shadow-md">
-                <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
-                  <span className="w-6 h-6 rounded-full bg-[#F20D28] text-white flex items-center justify-center text-xs font-bold shadow">
-                    2
-                  </span>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Poster & Backdrop URLs
-                  </h3>
-                </div>
-
-                <div className="space-y-4">
-                  {/* Poster Image URL Input */}
                   <div>
                     <label className="block text-zinc-300 font-semibold text-xs mb-1.5">
-                      Paste Poster Image URL <span className="text-[#F20D28]">*</span>
+                      Original English Title
                     </label>
-                    <input
-                      type="url"
-                      required
-                      placeholder="Paste Poster Image URL (e.g. https://domain.com/poster.jpg)"
-                      value={posterUrl}
-                      onChange={(e) => setPosterUrl(e.target.value)}
-                      className="w-full bg-[#0a0b10] border border-white/15 focus:border-[#F20D28] rounded-xl px-3.5 py-2.5 text-white text-xs font-mono placeholder:text-zinc-600 focus:outline-none transition-colors shadow-inner"
-                    />
-                    <p className="text-[11px] text-zinc-400 mt-1">
-                      Direct HTTPS image link for movie poster thumbnail (2:3 aspect ratio).
-                    </p>
-                  </div>
-
-                  {/* Backdrop Image URL Input */}
-                  <div>
-                    <label className="block text-zinc-300 font-semibold text-xs mb-1.5">
-                      Paste Backdrop Image URL (Optional)
-                    </label>
-                    <input
-                      type="url"
-                      placeholder="Paste Backdrop Image URL (e.g. https://domain.com/backdrop.jpg)"
-                      value={backdropUrl}
-                      onChange={(e) => setBackdropUrl(e.target.value)}
-                      className="w-full bg-[#0a0b10] border border-white/15 focus:border-[#F20D28] rounded-xl px-3.5 py-2.5 text-white text-xs font-mono placeholder:text-zinc-600 focus:outline-none transition-colors shadow-inner"
-                    />
-                    <p className="text-[11px] text-zinc-400 mt-1">
-                      Wide 16:9 banner for hero background. If omitted, the poster URL is used automatically.
-                    </p>
-                  </div>
-
-                  {/* Poster & Backdrop Live Previews */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    {/* Poster Preview */}
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-semibold text-zinc-400">Poster Preview</span>
-                      {posterUrl ? (
-                        <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden border border-white/15 bg-black group">
-                          <img
-                            src={posterUrl}
-                            alt="Poster Preview"
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).style.opacity = '0.3';
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setPosterUrl('')}
-                            className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-red-600 text-white transition-colors cursor-pointer"
-                            title="Clear poster URL"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="aspect-[2/3] w-full border border-dashed border-white/15 rounded-xl flex flex-col items-center justify-center p-4 text-center bg-[#0a0b10]">
-                          <ImageIcon className="w-6 h-6 text-zinc-500 mb-1" />
-                          <span className="text-xs text-zinc-500">Paste poster URL above to preview</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Backdrop Preview */}
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-semibold text-zinc-400">Backdrop Preview</span>
-                      {backdropUrl || posterUrl ? (
-                        <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden border border-white/15 bg-black group">
-                          <img
-                            src={backdropUrl || posterUrl}
-                            alt="Backdrop Preview"
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).style.opacity = '0.3';
-                            }}
-                          />
-                          {backdropUrl && (
-                            <button
-                              type="button"
-                              onClick={() => setBackdropUrl('')}
-                              className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-red-600 text-white transition-colors cursor-pointer"
-                              title="Clear backdrop URL"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="aspect-[16/9] w-full border border-dashed border-white/15 rounded-xl flex flex-col items-center justify-center p-4 text-center bg-[#0a0b10]">
-                          <ImageIcon className="w-6 h-6 text-zinc-500 mb-1" />
-                          <span className="text-xs text-zinc-500">Paste backdrop URL above to preview</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Logo & Accent Color Row */}
-                  <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-3">
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => logoInputRef.current?.click()}
-                        className="text-[11px] text-zinc-400 hover:text-white font-medium flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>{logoDataUrl ? 'Change Title Logo' : 'Upload Title Logo'}</span>
-                      </button>
-                      <input
-                        type="file"
-                        ref={logoInputRef}
-                        accept="image/png,image/*"
-                        onChange={handleLogoSelected}
-                        className="hidden"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-zinc-400">Accent:</span>
-                      <input
-                        type="color"
-                        value={accentColor}
-                        onChange={(e) => setAccentColor(e.target.value)}
-                        className="w-6 h-6 rounded cursor-pointer bg-transparent border-0"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 4: VJ ASSIGNMENT (WITH DEVICE UPLOAD VJ AVATAR) */}
-              <div className="bg-[#121319] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-4 shadow-md">
-                <div className="flex items-center justify-between pb-2 border-b border-white/5">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-full bg-[#F20D28] text-white flex items-center justify-center text-xs font-bold shadow">
-                      4
-                    </span>
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                      VJ Assignment
-                    </h3>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowAddVjModal(true)}
-                    className="inline-flex items-center gap-1.5 bg-[#F20D28] hover:bg-[#d60b23] text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition-transform hover:scale-105 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add New VJ</span>
-                  </button>
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  {/* Selected VJ Card */}
-                  <div className="flex items-center gap-3.5 bg-[#0a0b10] border border-white/10 rounded-xl p-3">
-                    <div className="relative w-13 h-13 rounded-full ring-2 ring-[#F20D28] overflow-hidden shrink-0 bg-zinc-900 shadow">
-                      {selectedVjAvatarUrl ? (
-                        <img
-                          src={selectedVjAvatarUrl}
-                          alt={selectedVjName}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs font-bold text-zinc-400">
-                          VJ
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <label className="text-[10px] uppercase font-bold text-zinc-500 block">
-                          Selected Video Jockey
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => selectedVjAvatarInputRef.current?.click()}
-                          className="text-[11px] font-bold text-[#F20D28] hover:text-red-400 flex items-center gap-1 cursor-pointer transition-colors"
-                        >
-                          <Upload className="w-3 h-3" />
-                          <span>Upload Photo</span>
-                        </button>
-                        <input
-                          type="file"
-                          ref={selectedVjAvatarInputRef}
-                          accept="image/*"
-                          onChange={handleSelectedVjAvatarSelected}
-                          className="hidden"
-                        />
-                      </div>
-                      <select
-                        value={selectedVjName}
-                        onChange={(e) => {
-                          const name = e.target.value;
-                          setSelectedVjName(name);
-                          const found = vjsList.find((v) => v.name === name);
-                          if (found) {
-                            setSelectedVjAvatarUrl(found.avatar_url);
-                            setVjBio(found.bio || '');
-                          }
-                        }}
-                        className="w-full bg-[#121319] border border-white/10 rounded-lg p-2 text-white font-bold focus:outline-none focus:border-[#F20D28]"
-                      >
-                        {vjsList.map((v) => (
-                          <option key={v.id} value={v.name}>
-                            {v.name}
-                          </option>
-                        ))}
-                        {/* Preset options if storage is fresh */}
-                        {vjsList.length === 0 && (
-                          <>
-                            <option value="VJ Junior">VJ Junior</option>
-                            <option value="VJ Mark">VJ Mark</option>
-                            <option value="VJ Ice P">VJ Ice P</option>
-                            <option value="VJ Emmy">VJ Emmy</option>
-                            <option value="VJ Jingo">VJ Jingo</option>
-                            <option value="VJ K-Frank">VJ K-Frank</option>
-                          </>
-                        )}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-400 font-medium mb-1">
-                      VJ Bio / Note (Optional)
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder="Short description about the VJ..."
-                      value={vjBio}
-                      onChange={(e) => setVjBio(e.target.value)}
-                      className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#F20D28]"
-                    />
-                  </div>
-                </div>
-
-                {/* Sub-Modal / Drawer to Add New VJ */}
-                {showAddVjModal && (
-                  <div className="p-4 bg-[#0a0b10] border border-red-500/30 rounded-xl space-y-3 animate-in fade-in">
-                    <div className="flex items-center justify-between pb-1 border-b border-white/10">
-                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-[#F20D28]" />
-                        <span>Create New VJ Profile</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setShowAddVjModal(false)}
-                        className="text-zinc-400 hover:text-white"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-12 h-12 rounded-full ring-2 ring-[#F20D28] overflow-hidden shrink-0 bg-zinc-900">
-                        {newVjAvatarUrl ? (
-                          <img
-                            src={newVjAvatarUrl}
-                            alt="New VJ"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-xs font-bold text-zinc-500">
-                            VJ
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex-1">
-                        <button
-                          type="button"
-                          onClick={() => newVjAvatarInputRef.current?.click()}
-                          className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>Upload VJ Photo from Device</span>
-                        </button>
-                        <input
-                          type="file"
-                          ref={newVjAvatarInputRef}
-                          accept="image/*"
-                          onChange={handleNewVjAvatarSelected}
-                          className="hidden"
-                        />
-                      </div>
-                    </div>
-
                     <input
                       type="text"
-                      placeholder="Enter VJ Name (e.g. VJ Junior)"
-                      value={newVjName}
-                      onChange={(e) => setNewVjName(e.target.value)}
-                      className="w-full bg-[#121319] border border-white/10 rounded-lg p-2 text-white text-xs focus:outline-none focus:border-[#F20D28]"
+                      placeholder="e.g. Extraction 2"
+                      value={originalTitle}
+                      onChange={(e) => setOriginalTitle(e.target.value)}
+                      className="w-full bg-[#0a0b10] border border-white/15 focus:border-[#E50914] rounded-xl px-3.5 py-2.5 text-white text-xs focus:outline-none transition-colors"
                     />
-
-                    <input
-                      type="text"
-                      placeholder="VJ Bio / Specialty (e.g. Action Specialist)"
-                      value={newVjBio}
-                      onChange={(e) => setNewVjBio(e.target.value)}
-                      className="w-full bg-[#121319] border border-white/10 rounded-lg p-2 text-white text-xs focus:outline-none focus:border-[#F20D28]"
-                    />
-
-                    <div className="flex justify-end gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setShowAddVjModal(false)}
-                        className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveNewVj}
-                        className="px-3 py-1.5 rounded-lg bg-[#F20D28] hover:bg-[#d60b23] text-white text-xs font-bold shadow cursor-pointer"
-                      >
-                        Save VJ
-                      </button>
-                    </div>
                   </div>
-                )}
-              </div>
-
-              {/* SECTION 5: GENRES & CATEGORISATION */}
-              <div className="bg-[#121319] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-4 shadow-md">
-                <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
-                  <span className="w-6 h-6 rounded-full bg-[#F20D28] text-white flex items-center justify-center text-xs font-bold shadow">
-                    5
-                  </span>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Genres & Categorisation
-                  </h3>
                 </div>
 
-                <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-zinc-300 font-semibold text-xs mb-1.5">
+                    Plot Synopsis
+                  </label>
+                  <textarea
+                    rows={4}
+                    placeholder="Enter engaging Luganda or English storyline summary..."
+                    value={synopsis}
+                    onChange={(e) => setSynopsis(e.target.value)}
+                    className="w-full bg-[#0a0b10] border border-white/15 focus:border-[#E50914] rounded-xl p-3 text-white text-xs leading-relaxed focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
                   <div>
-                    <label className="block text-zinc-400 font-medium mb-1">
-                      Primary Genre <span className="text-[#F20D28]">*</span>
-                    </label>
+                    <label className="block text-zinc-400 font-medium mb-1">Release Year</label>
+                    <input
+                      type="number"
+                      min={1970}
+                      max={2030}
+                      value={releaseYear}
+                      onChange={(e) => setReleaseYear(Number(e.target.value))}
+                      className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2 text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">Duration (min)</label>
+                    <input
+                      type="number"
+                      min={10}
+                      max={400}
+                      value={durationMinutes}
+                      onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                      className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2 text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">Age Rating</label>
                     <select
-                      value={primaryGenre}
-                      onChange={(e) => setPrimaryGenre(e.target.value)}
-                      className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-[#F20D28]"
+                      value={ageRating}
+                      onChange={(e) => setAgeRating(e.target.value)}
+                      className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2 text-white font-semibold"
                     >
-                      {PRIMARY_GENRES.map((g) => (
-                        <option key={g} value={g}>
-                          {g}
+                      {AGE_RATINGS.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
                         </option>
                       ))}
                     </select>
                   </div>
 
                   <div>
-                    <span className="text-[11px] text-zinc-400 font-medium block mb-2">
-                      All Genres (Click to Select):
+                    <label className="block text-zinc-400 font-medium mb-1">Video Quality</label>
+                    <select
+                      value={videoQuality}
+                      onChange={(e) => setVideoQuality(e.target.value)}
+                      className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2 text-white font-semibold"
+                    >
+                      {VIDEO_QUALITIES.map((q) => (
+                        <option key={q} value={q}>
+                          {q}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setActiveStepTab(2)}
+                    className="px-5 py-2 bg-[#E50914] text-white text-xs font-bold rounded-xl shadow cursor-pointer"
+                  >
+                    Continue to Media Files →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2: VIDEO & POSTER FILES (PRIMARY DIRECT DEVICE UPLOAD) */}
+          {activeStepTab === 2 && (
+            <div className="space-y-6 max-w-4xl mx-auto">
+              {/* Method Switcher: Device File Upload vs External URL */}
+              <div className="flex items-center justify-between bg-[#121319] p-3 rounded-2xl border border-white/10">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-[#E50914]" />
+                  <span className="text-xs font-bold text-white">Upload Method:</span>
+                </div>
+                <div className="inline-flex bg-zinc-950 p-1 rounded-xl border border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setUploadMethod('file')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      uploadMethod === 'file'
+                        ? 'bg-[#E50914] text-white shadow'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Direct Device Upload (Recommended)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUploadMethod('url')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      uploadMethod === 'url'
+                        ? 'bg-[#E50914] text-white shadow'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <LinkIcon className="w-3.5 h-3.5" />
+                    <span>External Stream URL</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 1. MOVIE VIDEO FILE UPLOADER */}
+              <div className="bg-[#121319] border border-white/10 rounded-2xl p-5 space-y-4 shadow-md">
+                <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                  <div className="flex items-center gap-2">
+                    <Video className="w-4 h-4 text-[#E50914]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                      Master Video File <span className="text-[#E50914]">*</span>
+                    </h3>
+                  </div>
+                  {movieFile && (
+                    <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/40">
+                      {fileSizeMb} MB Ready
                     </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {PRIMARY_GENRES.map((g) => {
-                        const isSelected = primaryGenre === g;
-                        return (
+                  )}
+                </div>
+
+                {uploadMethod === 'file' ? (
+                  <div>
+                    <input
+                      type="file"
+                      ref={movieFileInputRef}
+                      onChange={handleMovieFileChange}
+                      accept="video/mp4,video/x-matroska,video/webm,video/quicktime,.mp4,.mkv,.webm,.mov"
+                      className="hidden"
+                    />
+
+                    {movieFile ? (
+                      <div className="bg-[#0a0b10] border border-white/15 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-red-950/80 border border-red-700/50 flex items-center justify-center text-[#E50914]">
+                              <FileVideo className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className="font-bold text-xs text-white max-w-sm sm:max-w-md truncate">
+                                {movieFile.name}
+                              </div>
+                              <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                                {(movieFile.size / (1024 * 1024)).toFixed(1)} MB · Ready for range streaming
+                              </div>
+                            </div>
+                          </div>
+
                           <button
-                            key={g}
                             type="button"
-                            onClick={() => setPrimaryGenre(g)}
-                            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                              isSelected
-                                ? 'bg-[#F20D28] text-white shadow'
-                                : 'bg-[#0a0b10] text-zinc-300 hover:text-white border border-white/10'
-                            }`}
+                            onClick={() => movieFileInputRef.current?.click()}
+                            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                           >
-                            {g}
+                            Change File
                           </button>
-                        );
-                      })}
+                        </div>
+
+                        {/* Local Video Preview */}
+                        {moviePreviewUrl && (
+                          <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-black border border-white/10 mt-2">
+                            <video
+                              src={moviePreviewUrl}
+                              controls
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => movieFileInputRef.current?.click()}
+                        className="border-2 border-dashed border-white/20 hover:border-[#E50914]/70 rounded-2xl p-8 sm:p-10 text-center space-y-3 bg-[#0a0b10]/60 hover:bg-[#0a0b10] transition-all cursor-pointer group"
+                      >
+                        <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-white/10 group-hover:border-[#E50914]/50 flex items-center justify-center text-zinc-400 group-hover:text-[#E50914] mx-auto transition-colors">
+                          <Upload className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">
+                            Choose Movie Video File from Device
+                          </div>
+                          <p className="text-xs text-zinc-400 mt-1">
+                            Click to browse or drop MP4, MKV, WebM, or MOV file (Supports master files up to 4GB)
+                          </p>
+                        </div>
+                        <span className="inline-block px-4 py-1.5 bg-[#E50914] text-white text-xs font-semibold rounded-xl shadow">
+                          Browse Local Storage
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-zinc-300 font-semibold text-xs mb-1.5">
+                      Direct Video Stream Link
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="e.g. https://domain.com/movie.mp4 or .m3u8"
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.target.value)}
+                      className="w-full bg-[#0a0b10] border border-white/15 focus:border-[#E50914] rounded-xl px-3.5 py-2.5 text-white text-xs font-mono focus:outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 2. POSTER & BACKDROP ARTWORK UPLOADER */}
+              <div className="bg-[#121319] border border-white/10 rounded-2xl p-5 space-y-4 shadow-md">
+                <div className="flex items-center gap-2 pb-2 border-b border-white/5">
+                  <ImageIcon className="w-4 h-4 text-[#E50914]" />
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    Movie Artwork &amp; Posters <span className="text-[#E50914]">*</span>
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Poster Image (2:3 aspect) */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold text-zinc-300 block">
+                      Portrait Movie Poster (2:3) <span className="text-[#E50914]">*</span>
+                    </span>
+
+                    <input
+                      type="file"
+                      ref={posterFileInputRef}
+                      onChange={handlePosterFileChange}
+                      accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+                      className="hidden"
+                    />
+
+                    {posterPreviewUrl || posterUrl ? (
+                      <div className="relative aspect-[2/3] w-full max-w-[200px] mx-auto rounded-xl overflow-hidden border border-white/20 bg-black group">
+                        <img
+                          src={posterPreviewUrl || posterUrl}
+                          alt="Poster Preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPosterFile(null);
+                            setPosterPreviewUrl('');
+                            setPosterUrl('');
+                          }}
+                          className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/70 hover:bg-red-600 text-white transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => posterFileInputRef.current?.click()}
+                        className="aspect-[2/3] w-full max-w-[200px] mx-auto border-2 border-dashed border-white/20 hover:border-[#E50914]/70 rounded-xl flex flex-col items-center justify-center p-4 text-center bg-[#0a0b10] hover:bg-zinc-900 transition-colors cursor-pointer"
+                      >
+                        <ImageIcon className="w-6 h-6 text-zinc-500 mb-1" />
+                        <span className="text-xs font-semibold text-white">Select Poster</span>
+                        <span className="text-[10px] text-zinc-500 mt-0.5">JPG, PNG, or WebP</span>
+                      </div>
+                    )}
+
+                    <div className="text-center pt-1">
+                      <button
+                        type="button"
+                        onClick={() => posterFileInputRef.current?.click()}
+                        className="text-[11px] text-zinc-400 hover:text-white font-medium underline cursor-pointer"
+                      >
+                        {posterPreviewUrl ? 'Replace Poster Image' : 'Browse Poster from Device'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Backdrop Banner (16:9 aspect) */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold text-zinc-300 block">
+                      Horizontal Backdrop Banner (16:9)
+                    </span>
+
+                    <input
+                      type="file"
+                      ref={backdropFileInputRef}
+                      onChange={handleBackdropFileChange}
+                      accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+                      className="hidden"
+                    />
+
+                    {backdropPreviewUrl || backdropUrl ? (
+                      <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-white/20 bg-black group">
+                        <img
+                          src={backdropPreviewUrl || backdropUrl}
+                          alt="Backdrop Preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBackdropFile(null);
+                            setBackdropPreviewUrl('');
+                            setBackdropUrl('');
+                          }}
+                          className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/70 hover:bg-red-600 text-white transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => backdropFileInputRef.current?.click()}
+                        className="aspect-video w-full border-2 border-dashed border-white/20 hover:border-[#E50914]/70 rounded-xl flex flex-col items-center justify-center p-4 text-center bg-[#0a0b10] hover:bg-zinc-900 transition-colors cursor-pointer"
+                      >
+                        <ImageIcon className="w-6 h-6 text-zinc-500 mb-1" />
+                        <span className="text-xs font-semibold text-white">Select Backdrop</span>
+                        <span className="text-[10px] text-zinc-500 mt-0.5">Hero carousel banner</span>
+                      </div>
+                    )}
+
+                    <div className="text-center pt-1">
+                      <button
+                        type="button"
+                        onClick={() => backdropFileInputRef.current?.click()}
+                        className="text-[11px] text-zinc-400 hover:text-white font-medium underline cursor-pointer"
+                      >
+                        {backdropPreviewUrl ? 'Replace Banner Image' : 'Browse Banner from Device'}
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
+
+              <div className="pt-2 flex justify-between">
+                <button
+                  type="button"
+                  onClick={() => setActiveStepTab(1)}
+                  className="px-4 py-2 bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-xl cursor-pointer"
+                >
+                  ← Back to Details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveStepTab(3)}
+                  className="px-5 py-2 bg-[#E50914] text-white text-xs font-bold rounded-xl shadow cursor-pointer"
+                >
+                  Continue to VJ Assignment →
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* STEP 3: VJ ASSIGNMENT & GENRES */}
+          {activeStepTab === 3 && (
+            <div className="space-y-6 max-w-3xl mx-auto">
+              {/* VJ Selection */}
+              <div className="bg-[#121319] border border-white/10 rounded-2xl p-5 space-y-4 shadow-md">
+                <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    VJ Translator Assignment
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddVjModal(true)}
+                    className="inline-flex items-center gap-1.5 text-xs text-[#E50914] hover:text-red-400 font-bold cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add New VJ Profile</span>
+                  </button>
+                </div>
+
+                {/* Add VJ Drawer */}
+                {showAddVjModal && (
+                  <div className="p-4 bg-zinc-950 border border-white/15 rounded-xl space-y-3 animate-in fade-in">
+                    <h4 className="text-xs font-bold text-white">Create New VJ Translator</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <input
+                        type="text"
+                        placeholder="VJ Name (e.g. VJ Emmy, VJ Jingo)"
+                        value={newVjName}
+                        onChange={(e) => setNewVjName(e.target.value)}
+                        className="bg-[#0a0b10] border border-white/10 rounded-lg p-2 text-white"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Avatar Image URL (optional)"
+                        value={newVjAvatarUrl}
+                        onChange={(e) => setNewVjAvatarUrl(e.target.value)}
+                        className="bg-[#0a0b10] border border-white/10 rounded-lg p-2 text-white"
+                      />
+                    </div>
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddVjModal(false)}
+                        className="px-3 py-1 bg-zinc-800 text-zinc-300 text-xs rounded-lg"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveNewVj}
+                        className="px-3.5 py-1 bg-[#E50914] text-white text-xs font-bold rounded-lg shadow"
+                      >
+                        Save VJ
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-zinc-300 font-semibold text-xs mb-1.5">
+                    Select Assigned VJ Translator
+                  </label>
+                  <select
+                    value={selectedVjName}
+                    onChange={(e) => {
+                      setSelectedVjName(e.target.value);
+                      const vj = vjsList.find((v) => v.name === e.target.value);
+                      if (vj) {
+                        setSelectedVjAvatarUrl(vj.avatar_url || '');
+                        setVjBio(vj.bio || '');
+                      }
+                    }}
+                    className="w-full bg-[#0a0b10] border border-white/15 rounded-xl p-2.5 text-white font-bold text-xs"
+                  >
+                    {vjsList.length > 0 ? (
+                      vjsList.map((vj) => (
+                        <option key={vj.id || vj.name} value={vj.name}>
+                          {vj.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="VJ Junior">VJ Junior</option>
+                        <option value="VJ Jingo">VJ Jingo</option>
+                        <option value="VJ Emmy">VJ Emmy</option>
+                        <option value="VJ Ice P">VJ Ice P</option>
+                        <option value="VJ Mark">VJ Mark</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {/* Genre Selection */}
+              <div className="bg-[#121319] border border-white/10 rounded-2xl p-5 space-y-4 shadow-md">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider pb-2 border-b border-white/5">
+                  Genres &amp; Categorization
+                </h3>
+
+                <div>
+                  <label className="block text-zinc-400 font-medium text-xs mb-1">
+                    Primary Genre <span className="text-[#E50914]">*</span>
+                  </label>
+                  <select
+                    value={primaryGenre}
+                    onChange={(e) => setPrimaryGenre(e.target.value)}
+                    className="w-full bg-[#0a0b10] border border-white/10 rounded-xl p-2.5 text-white font-bold text-xs"
+                  >
+                    {PRIMARY_GENRES.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <span className="text-[11px] text-zinc-400 font-medium block mb-2">
+                    Click to Select Genre Tag:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PRIMARY_GENRES.map((g) => {
+                      const isSelected = primaryGenre === g;
+                      return (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setPrimaryGenre(g)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#E50914] text-white shadow'
+                              : 'bg-[#0a0b10] text-zinc-300 hover:text-white border border-white/10'
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-between">
+                <button
+                  type="button"
+                  onClick={() => setActiveStepTab(2)}
+                  className="px-4 py-2 bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-xl cursor-pointer"
+                >
+                  ← Back to Files
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveStepTab(4)}
+                  className="px-5 py-2 bg-[#E50914] text-white text-xs font-bold rounded-xl shadow cursor-pointer"
+                >
+                  Continue to Placement &amp; Publish →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 4: PLACEMENT & PUBLISHING */}
+          {activeStepTab === 4 && (
+            <div className="space-y-6 max-w-3xl mx-auto">
+              <div className="bg-[#121319] border border-white/10 rounded-2xl p-5 space-y-4 shadow-md">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider pb-2 border-b border-white/5">
+                  Browse Placement &amp; Promotion
+                </h3>
+
+                <div className="space-y-3 text-xs">
+                  <label className="flex items-center gap-2.5 cursor-pointer p-2 rounded-xl bg-[#0a0b10] border border-white/5">
+                    <input
+                      type="checkbox"
+                      checked={isFeatured}
+                      onChange={(e) => setIsFeatured(e.target.checked)}
+                      className="w-4 h-4 accent-[#E50914] rounded cursor-pointer"
+                    />
+                    <div>
+                      <span className="font-bold text-white block">Feature in Top Hero Banner</span>
+                      <span className="text-[11px] text-zinc-400">Promotes this title at the very top carousel of the Browse tab</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 cursor-pointer p-2 rounded-xl bg-[#0a0b10] border border-white/5">
+                    <input
+                      type="checkbox"
+                      checked={isTrending}
+                      onChange={(e) => setIsTrending(e.target.checked)}
+                      className="w-4 h-4 accent-[#E50914] rounded cursor-pointer"
+                    />
+                    <div>
+                      <span className="font-bold text-white block">Show in Trending Now Rail</span>
+                      <span className="text-[11px] text-zinc-400">Highlights this title among high-interest cinema releases</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 cursor-pointer p-2 rounded-xl bg-[#0a0b10] border border-white/5">
+                    <input
+                      type="checkbox"
+                      checked={isRecentlyAdded}
+                      onChange={(e) => setIsRecentlyAdded(e.target.checked)}
+                      className="w-4 h-4 accent-[#E50914] rounded cursor-pointer"
+                    />
+                    <div>
+                      <span className="font-bold text-white block">Show in Recently Added</span>
+                      <span className="text-[11px] text-zinc-400">Places this title into the newest arrivals row</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Ready to Publish Summary */}
+              <div className="bg-[#0a0b10] border border-emerald-500/30 rounded-2xl p-5 text-xs space-y-3">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Ready for Live Streaming</span>
+                </div>
+                <p className="text-zinc-300 leading-relaxed">
+                  Upon publishing, this movie file will be permanently hosted on your dedicated server disk storage with HTTP 206 Range requests (preventing any buffering or broken playback) and automatically synchronized with your Cloud Firestore database.
+                </p>
+                <div className="pt-1 flex items-center gap-3 text-zinc-400 font-mono text-[11px]">
+                  <span>Title: {title || 'Untitled'}</span>
+                  <span>·</span>
+                  <span>VJ: {selectedVjName}</span>
+                  <span>·</span>
+                  <span>Genre: {primaryGenre}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ========================================================
-            BOTTOM ACTION BAR (Matching Screenshot)
+            BOTTOM ACTION BAR
            ======================================================== */}
         <div className="p-4 sm:p-5 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 bg-[#121319]">
           <div className="flex items-center gap-2 text-xs text-zinc-400">
-            <span className="w-2 h-2 rounded-full bg-[#F20D28] inline-block animate-pulse" />
-            <span>All media files & posters stored securely from your device</span>
+            <span className="w-2 h-2 rounded-full bg-[#E50914] inline-block animate-pulse" />
+            <span>Direct device storage upload with Cloud Firestore synchronization</span>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={onClose}
               className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs transition-colors cursor-pointer"
             >
@@ -1191,10 +1219,16 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
               type="button"
               disabled={isSubmitting}
               onClick={() => handleSubmit(true)}
-              className="px-6 py-2.5 rounded-xl bg-[#F20D28] hover:bg-[#d60b23] text-white font-bold text-xs shadow-lg shadow-red-700/40 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              className="px-6 py-2.5 rounded-xl bg-[#E50914] hover:bg-[#d60b23] text-white font-bold text-xs shadow-lg shadow-red-700/40 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-2"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{isSubmitting ? 'Publishing...' : 'Publish to Live Sakanet'}</span>
+              <span>
+                {isSubmitting
+                  ? uploadProgress > 0
+                    ? `Uploading (${uploadProgress}%)`
+                    : 'Saving Movie...'
+                  : 'Publish Movie to Sakanet'}
+              </span>
             </button>
           </div>
         </div>

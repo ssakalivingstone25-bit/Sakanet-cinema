@@ -34,7 +34,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    fileSize: 2 * 1024 * 1024 * 1024, // Up to 2GB per video file
+    fileSize: 4 * 1024 * 1024 * 1024, // Up to 4GB per master movie file
   },
 });
 
@@ -83,6 +83,8 @@ app.get(['/movies/:filename', '/uploads/:filename'], (req: Request, res: Respons
       'Content-Length': chunksize,
       'Content-Type': contentType,
       'Access-Control-Allow-Origin': '*',
+      'Access-Control-Expose-Headers': 'Content-Range, Accept-Ranges, Content-Length',
+      'Cache-Control': 'public, max-age=31536000',
     };
 
     res.writeHead(206, head);
@@ -93,6 +95,8 @@ app.get(['/movies/:filename', '/uploads/:filename'], (req: Request, res: Respons
       'Content-Type': contentType,
       'Accept-Ranges': 'bytes',
       'Access-Control-Allow-Origin': '*',
+      'Access-Control-Expose-Headers': 'Accept-Ranges, Content-Length',
+      'Cache-Control': 'public, max-age=31536000',
     };
     res.writeHead(200, head);
     fs.createReadStream(filePath).pipe(res);
@@ -213,7 +217,7 @@ function formatMovieRecord(row: any) {
     videoUrl: video_url, // streamable URL alias
     uploadedAt: row.uploaded_at || row.created_at || createdDate,
     thumbnail_url: poster_url,
-    banner_url: poster_url,
+    banner_url: row.banner_url || poster_url,
     genre: row.genre || 'Action',
     vj_name: row.vj_name || 'VJ Junior',
     vj_avatar_url: row.vj_avatar_url || '',

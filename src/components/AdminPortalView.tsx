@@ -211,13 +211,11 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
             <div className="flex items-center gap-2 mb-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
               <h1 className="text-2xl font-bold font-display text-white tracking-tight">
-                Sakanet Ingestion & Admin Portal
+                Sakanet Movie Management &amp; Admin Portal
               </h1>
             </div>
             <p className="text-xs text-zinc-400 max-w-2xl leading-relaxed">
-              Stream and publish movies via lightweight video and poster URLs. Uploaded movies land in
-              the <span className="text-amber-400 font-semibold">Awaiting Publication</span> section
-              for plot descriptions and synopsis review before going live on the platform.
+              Upload movie files and posters directly from your device or stream links. Uploaded movies are securely hosted on server storage with HTTP range streaming and synced to Cloud Firestore.
             </p>
           </div>
 
@@ -228,10 +226,10 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
                 setEditingMovie(null);
                 setShowEditModal(true);
               }}
-              className="flex items-center gap-2 bg-[#F20D28] hover:bg-[#d60b23] text-white font-bold text-xs md:text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-red-700/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 bg-[#E50914] hover:bg-[#d60b23] text-white font-bold text-xs md:text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-red-700/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
-              <span>Add Movie via Stream URL</span>
+              <Upload className="w-4 h-4" />
+              <span>Upload Movie from Device</span>
             </button>
           </div>
         </div>
