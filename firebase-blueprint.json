@@ -14,6 +14,8 @@
         "download_quota_used_mb": { "type": "number", "description": "Megabytes downloaded" },
         "download_quota_limit_mb": { "type": "number", "description": "Quota limit in megabytes" },
         "watchlist": { "type": "array", "description": "Array of saved movie IDs" },
+        "genrePreferences": { "type": "array", "description": "User preferred genres for recommendation engine" },
+        "watchHistory": { "type": "array", "description": "User watch history records with progress and timestamps" },
         "createdAt": { "type": "string", "description": "Account registration ISO timestamp" },
         "updatedAt": { "type": "string", "description": "Last update ISO timestamp" }
       },

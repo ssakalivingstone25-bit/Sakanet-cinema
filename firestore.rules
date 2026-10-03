@@ -34,6 +34,10 @@ service cloud.firestore {
       allow create: if isOwner(userId);
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
+
+      match /watchHistory/{historyId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
     }
 
     // Movies catalog: Anyone can view active movies, admin can write/delete, signed in users can update rating

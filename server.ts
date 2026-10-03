@@ -1,4 +1,5 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import multer from 'multer';
 import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
@@ -47,13 +48,7 @@ app.get(['/movies/:filename', '/uploads/:filename'], (req: Request, res: Respons
   let filePath = path.join(uploadDir, filename);
 
   if (!fs.existsSync(filePath)) {
-    // If not found, gracefully fall back to cinema-master-stream.mp4 so playback never crashes or 404s
-    const fallbackPath = path.join(uploadDir, 'cinema-master-stream.mp4');
-    if (fs.existsSync(fallbackPath)) {
-      filePath = fallbackPath;
-    } else {
-      return res.status(404).json({ error: 'Media file not found' });
-    }
+    return res.status(404).json({ error: 'Media file not found' });
   }
 
   const stat = fs.statSync(filePath);
@@ -135,6 +130,8 @@ db.exec(`
     director TEXT,
     cast TEXT,
     keywords TEXT,
+    video_url TEXT,
+    poster_url TEXT,
     thumbnail_url TEXT,
     banner_url TEXT,
     file_url TEXT,
@@ -175,9 +172,15 @@ db.exec(`
   );
 `);
 
-// Add uploaded_at column if database already existed without it
+// Add uploaded_at, video_url, poster_url columns if database already existed without them
 try {
   db.exec('ALTER TABLE movies ADD COLUMN uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+} catch {}
+try {
+  db.exec('ALTER TABLE movies ADD COLUMN video_url TEXT');
+} catch {}
+try {
+  db.exec('ALTER TABLE movies ADD COLUMN poster_url TEXT');
 } catch {}
 
 // Ensure all uploaded movies are active by default so catalog always shows them
@@ -190,9 +193,13 @@ console.log('Connected to persistent SQLite database at:', dbPath);
 // Helper to format SQLite movie record for React frontend
 function formatMovieRecord(row: any) {
   if (!row) return null;
-  const filename = row.filename || '';
-  const streamUrl = row.file_url || (filename ? `/movies/${filename}` : '/movies/cinema-master-stream.mp4');
-  const defaultThumbnail = filename ? `/movies/${filename}` : '/movies/cinema-master-stream.mp4';
+  const isVideoExt = (url: string) => /\.(mp4|webm|mkv|mov)$/i.test(url);
+  const video_url = row.video_url || row.file_url || (row.filename ? `/movies/${row.filename}` : '');
+  const poster_url =
+    row.poster_url ||
+    (row.thumbnail_url && !isVideoExt(row.thumbnail_url) ? row.thumbnail_url : '') ||
+    (row.banner_url && !isVideoExt(row.banner_url) ? row.banner_url : '') ||
+    '';
   const idStr = String(row.id);
   const createdDate = row.created_at || row.uploaded_at || new Date().toISOString();
 
@@ -200,12 +207,13 @@ function formatMovieRecord(row: any) {
     ...row,
     id: idStr,
     title: row.title || 'Untitled Movie',
-    filename,
-    file_url: streamUrl,
-    videoUrl: streamUrl, // Included to match user's explicit API schema!
+    video_url,
+    poster_url,
+    file_url: video_url,
+    videoUrl: video_url, // streamable URL alias
     uploadedAt: row.uploaded_at || row.created_at || createdDate,
-    thumbnail_url: row.thumbnail_url || defaultThumbnail,
-    banner_url: row.banner_url || row.thumbnail_url || defaultThumbnail,
+    thumbnail_url: poster_url,
+    banner_url: poster_url,
     genre: row.genre || 'Action',
     vj_name: row.vj_name || 'VJ Junior',
     vj_avatar_url: row.vj_avatar_url || '',
@@ -221,7 +229,7 @@ function formatMovieRecord(row: any) {
     is_trending: row.is_trending === 0 ? false : true,
     is_recently_added: row.is_recently_added === 0 ? false : true,
     rating: Number(row.rating) || 5.0,
-    review_count: Number(row.review_count) || 1,
+    review_count: Number(row.review_count) || 0,
     release_year: Number(row.release_year) || new Date().getFullYear(),
     duration_minutes: Number(row.duration_minutes) || 120,
     created_at: createdDate,
@@ -270,10 +278,11 @@ app.post('/api/upload', upload.any(), (req: Request, res: Response) => {
 
     const id = body.id ? String(body.id) : `movie-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const filename = movieFile ? movieFile.filename : (body.filename || '');
-    const file_url = movieFile ? `/movies/${movieFile.filename}` : (body.file_url || (filename ? `/movies/${filename}` : ''));
-
-    const thumbnail_url = posterFile ? `/movies/${posterFile.filename}` : (body.thumbnail_url || file_url);
-    const banner_url = backdropFile ? `/movies/${backdropFile.filename}` : (body.banner_url || thumbnail_url);
+    const video_url = body.video_url || (movieFile ? `/movies/${movieFile.filename}` : (body.file_url || ''));
+    const poster_url = body.poster_url || (posterFile ? `/movies/${posterFile.filename}` : (body.thumbnail_url || ''));
+    const file_url = video_url;
+    const thumbnail_url = poster_url;
+    const banner_url = body.banner_url || poster_url;
     const vj_avatar_url = vjAvatarFile ? `/movies/${vjAvatarFile.filename}` : (body.vj_avatar_url || '');
 
     const file_size_mb = movieFile
@@ -306,7 +315,7 @@ app.post('/api/upload', upload.any(), (req: Request, res: Response) => {
         `UPDATE movies SET
           title = ?, original_title = ?, synopsis = ?, genre = ?, release_year = ?,
           duration_minutes = ?, age_rating = ?, vj_name = ?, vj_avatar_url = ?, vj_bio = ?,
-          director = ?, cast = ?, keywords = ?, thumbnail_url = ?, banner_url = ?,
+          director = ?, cast = ?, keywords = ?, video_url = ?, poster_url = ?, thumbnail_url = ?, banner_url = ?,
           file_url = ?, filename = ?, file_size_mb = ?, is_active = ?, is_featured = ?,
           is_trending = ?, is_recently_added = ?
          WHERE id = ?`
@@ -324,6 +333,8 @@ app.post('/api/upload', upload.any(), (req: Request, res: Response) => {
         vj_name,
         cast,
         keywords,
+        video_url || existing.video_url,
+        poster_url || existing.poster_url,
         thumbnail_url || existing.thumbnail_url,
         banner_url || existing.banner_url,
         file_url || existing.file_url,
@@ -340,10 +351,10 @@ app.post('/api/upload', upload.any(), (req: Request, res: Response) => {
         `INSERT INTO movies (
           id, title, original_title, synopsis, genre, release_year, duration_minutes,
           age_rating, vj_name, vj_avatar_url, vj_bio, director, cast, keywords,
-          thumbnail_url, banner_url, file_url, filename, file_size_mb, video_qualities,
+          video_url, poster_url, thumbnail_url, banner_url, file_url, filename, file_size_mb, video_qualities,
           audio_tracks, subtitles, rating, review_count, is_active, is_featured,
           is_trending, is_recently_added, download_permission, uploaded_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 5.0, 1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 5.0, 0, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
       ).run(
         id,
         title,
@@ -359,6 +370,8 @@ app.post('/api/upload', upload.any(), (req: Request, res: Response) => {
         vj_name,
         cast,
         keywords,
+        video_url,
+        poster_url,
         thumbnail_url,
         banner_url,
         file_url,
@@ -443,14 +456,17 @@ app.post('/api/movies', (req: Request, res: Response) => {
     const audios = JSON.stringify(movie.audio_tracks || ['Luganda [VJ Translation]']);
     const subs = JSON.stringify(movie.subtitles || ['English [CC]']);
 
+    const video_url = movie.video_url || movie.file_url || '';
+    const poster_url = movie.poster_url || movie.thumbnail_url || movie.banner_url || '';
+
     db.prepare(
       `INSERT INTO movies (
         id, title, original_title, synopsis, genre, release_year, duration_minutes,
         age_rating, vj_name, vj_avatar_url, vj_bio, director, cast, keywords,
-        thumbnail_url, banner_url, file_url, filename, file_size_mb, video_qualities,
+        video_url, poster_url, thumbnail_url, banner_url, file_url, filename, file_size_mb, video_qualities,
         audio_tracks, subtitles, rating, review_count, is_active, is_featured,
         is_trending, is_recently_added, download_permission
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         original_title = excluded.original_title,
@@ -465,6 +481,8 @@ app.post('/api/movies', (req: Request, res: Response) => {
         director = excluded.director,
         cast = excluded.cast,
         keywords = excluded.keywords,
+        video_url = excluded.video_url,
+        poster_url = excluded.poster_url,
         thumbnail_url = excluded.thumbnail_url,
         banner_url = excluded.banner_url,
         file_url = excluded.file_url,
@@ -489,9 +507,11 @@ app.post('/api/movies', (req: Request, res: Response) => {
       movie.director || movie.vj_name || 'Livingstone Saka',
       cast,
       keywords,
-      movie.thumbnail_url || '',
-      movie.banner_url || movie.thumbnail_url || '',
-      movie.file_url || '',
+      video_url,
+      poster_url,
+      poster_url,
+      movie.banner_url || poster_url,
+      video_url,
       movie.filename || '',
       movie.file_size_mb || 850,
       qualities,
@@ -531,7 +551,7 @@ app.put('/api/movies/:id', (req: Request, res: Response) => {
     const allowed = [
       'title', 'original_title', 'synopsis', 'genre', 'release_year',
       'duration_minutes', 'age_rating', 'vj_name', 'vj_avatar_url', 'vj_bio',
-      'director', 'thumbnail_url', 'banner_url', 'file_url', 'file_size_mb',
+      'director', 'video_url', 'poster_url', 'thumbnail_url', 'banner_url', 'file_url', 'file_size_mb',
       'is_active', 'is_featured', 'is_trending', 'is_recently_added',
       'download_permission'
     ];
@@ -706,7 +726,10 @@ async function startServer() {
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

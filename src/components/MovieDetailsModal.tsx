@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import {
   X,
   Play,
@@ -188,12 +189,24 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.22, ease: 'easeOut' }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto"
+    >
       {/* Backdrop Dismiss */}
       <div className="fixed inset-0" onClick={onClose} />
 
       {/* Modal Container */}
-      <div className="relative w-full max-w-4xl bg-[#121215] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-10 my-auto text-zinc-200">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.93, y: 24 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.93, y: 24 }}
+        transition={{ type: 'spring', damping: 26, stiffness: 320, mass: 0.8 }}
+        className="relative w-full max-w-4xl bg-[#121215] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-10 my-auto text-zinc-200"
+      >
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -358,7 +371,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                 </div>
               </div>
 
-              {/* Right Column: Cast, VJ Name, File Quota */}
+              {/* Right Column: Cast, VJ Name, File Size */}
               <div className="space-y-4 border-t md:border-t-0 md:border-l border-white/10 md:pl-6 text-xs">
                 <div>
                   <span className="text-zinc-500 block mb-1">VJ</span>
@@ -568,7 +581,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

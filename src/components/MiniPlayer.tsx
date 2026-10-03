@@ -13,8 +13,6 @@ interface MiniPlayerProps {
   onProgressUpdated?: () => void;
 }
 
-const FALLBACK_STREAM = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
-
 export const MiniPlayer: React.FC<MiniPlayerProps> = ({
   movie,
   initialTime,
@@ -40,11 +38,12 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
         setCurrentStreamUrl(dbUrl);
         return;
       }
-      if (movie.file_url && !movie.file_url.startsWith('blob:')) {
-        if (!cancelled) setCurrentStreamUrl(movie.file_url);
+      const streamUrl = movie.video_url || movie.file_url;
+      if (streamUrl && !cancelled) {
+        setCurrentStreamUrl(streamUrl);
         return;
       }
-      if (!cancelled) setCurrentStreamUrl(FALLBACK_STREAM);
+      if (!cancelled) setCurrentStreamUrl('');
     }
     resolveSource();
     return () => {
@@ -130,9 +129,8 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
           autoPlay={initialIsPlaying}
           onTimeUpdate={handleTimeUpdate}
           onError={() => {
-            if (currentStreamUrl !== FALLBACK_STREAM) {
-              setCurrentStreamUrl(FALLBACK_STREAM);
-            }
+            console.warn('MiniPlayer playback failed for URL:', currentStreamUrl);
+            setCurrentStreamUrl('');
           }}
           onLoadedMetadata={() => {
             if (videoRef.current) {

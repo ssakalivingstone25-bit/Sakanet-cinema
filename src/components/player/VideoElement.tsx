@@ -7,6 +7,7 @@ interface VideoElementProps {
   playbackSpeed: number;
   volume: number;
   isMuted: boolean;
+  objectFit?: 'contain' | 'cover';
   onTimeUpdate: () => void;
   onLoadedMetadata: () => void;
   onWaiting: () => void;
@@ -25,6 +26,7 @@ export const VideoElement = forwardRef<HTMLVideoElement, VideoElementProps>(
       playbackSpeed,
       volume,
       isMuted,
+      objectFit = 'contain',
       onTimeUpdate,
       onLoadedMetadata,
       onWaiting,
@@ -65,7 +67,9 @@ export const VideoElement = forwardRef<HTMLVideoElement, VideoElementProps>(
         onError={onError}
         onEnded={onEnded}
         onClick={onClick}
-        className="w-full h-full object-contain pointer-events-auto cursor-pointer select-none bg-black"
+        className={`w-full h-full pointer-events-auto cursor-pointer select-none bg-black transition-all duration-300 ${
+          objectFit === 'cover' ? 'object-cover' : 'object-contain'
+        }`}
       />
     );
   }

@@ -25,7 +25,6 @@ import {
 } from 'lucide-react';
 import { Movie, DownloadPermission } from '../types';
 import { storageService } from '../services/storageService';
-import { mediaDB } from '../services/mediaDB';
 import {
   saveMovieToFirestore,
   deleteMovieFromFirestore,
@@ -66,13 +65,6 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // File Upload State
-  const [isProcessingFile, setIsProcessingFile] = useState(false);
-  const [uploadProgressMsg, setUploadProgressMsg] = useState('');
-  const videoInputRef = useRef<HTMLInputElement>(null);
-  const posterInputRef = useRef<HTMLInputElement>(null);
-  const [pendingPosterDataUrl, setPendingPosterDataUrl] = useState<string | null>(null);
-
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -88,165 +80,6 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
       m.genre.toLowerCase().includes(searchTerm.toLowerCase()) ||
       m.director.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  // Handle direct file upload from device
-  const handleDeviceVideoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsProcessingFile(true);
-    setUploadProgressMsg('Reading video file from device...');
-
-    try {
-      const fileNameClean = file.name.replace(/\.[^/.]+$/, '');
-      const fileSizeMb = Math.round((file.size / (1024 * 1024)) * 10) / 10;
-      const objectUrl = URL.createObjectURL(file);
-
-      setUploadProgressMsg('Analyzing video duration & generating poster snapshot...');
-
-      // Load temporary video to detect runtime and extract poster frame
-      const tempVideo = document.createElement('video');
-      tempVideo.preload = 'metadata';
-      tempVideo.src = objectUrl;
-
-      const durationMinutes = await new Promise<number>((resolve) => {
-        tempVideo.onloadedmetadata = () => {
-          const mins = Math.max(1, Math.round(tempVideo.duration / 60));
-          resolve(mins);
-        };
-        tempVideo.onerror = () => resolve(110);
-      });
-
-      // Capture a snapshot frame at 1s for poster thumbnail
-      const thumbnailDataUrl = await new Promise<string>((resolve) => {
-        tempVideo.currentTime = Math.min(2, (tempVideo.duration || 10) / 2);
-        tempVideo.onseeked = () => {
-          try {
-            const canvas = document.createElement('canvas');
-            canvas.width = 480;
-            canvas.height = 720;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(tempVideo, 0, 0, 480, 720);
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-              resolve(dataUrl);
-              return;
-            }
-          } catch (err) {
-            console.warn('Canvas poster capture fallback:', err);
-          }
-          resolve(
-            pendingPosterDataUrl ||
-              'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&auto=format&fit=crop&q=80'
-          );
-        };
-        tempVideo.onerror = () => {
-          resolve(
-            pendingPosterDataUrl ||
-              'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&auto=format&fit=crop&q=80'
-          );
-        };
-      });
-
-      // Create new movie and persist permanently to server Multer disk storage and SQLite database
-      const finalPoster = pendingPosterDataUrl || thumbnailDataUrl;
-      const initialVj = 'VJ Junior';
-      const initialVjAvatar =
-        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=240&auto=format&fit=crop&q=80';
-
-      const fd = new FormData();
-      fd.append('movieFile', file);
-      fd.append('title', fileNameClean);
-      fd.append('synopsis', 'Awaiting administrator plot description and synopsis.');
-      fd.append('genre', 'Action');
-      fd.append('release_year', String(new Date().getFullYear()));
-      fd.append('duration_minutes', String(durationMinutes));
-      fd.append('director', initialVj);
-      fd.append('vj_name', initialVj);
-      fd.append('vj_avatar_url', initialVjAvatar);
-      fd.append('thumbnail_url', finalPoster);
-      fd.append('banner_url', finalPoster);
-      fd.append('file_size_mb', String(fileSizeMb));
-      fd.append('is_active', 'true');
-      fd.append('is_featured', 'true');
-      fd.append('is_trending', 'true');
-      fd.append('is_recently_added', 'true');
-
-      let savedMovie: Movie;
-      try {
-        savedMovie = await apiService.uploadMovie(fd);
-      } catch (err) {
-        console.warn('Server upload notice, saving locally:', err);
-        savedMovie = storageService.addMovie({
-          title: fileNameClean,
-          synopsis: 'Awaiting administrator plot description and synopsis.',
-          genre: 'Action',
-          release_year: new Date().getFullYear(),
-          duration_minutes: durationMinutes,
-          director: initialVj,
-          vj_name: initialVj,
-          vj_avatar_url: initialVjAvatar,
-          view_count: 0,
-          download_count: 0,
-          cast: ['Lead Performer'],
-          file_url: objectUrl,
-          thumbnail_url: finalPoster,
-          banner_url: finalPoster,
-          download_permission: 'free',
-          file_size_mb: fileSizeMb,
-          is_active: true,
-          is_featured: true,
-          video_qualities: ['4K UHD', '1080p FHD', '720p HD'],
-          audio_tracks: ['Luganda [VJ Translation]', 'English [Stereo]'],
-          subtitles: ['English [CC]'],
-        });
-      }
-
-      // Sync with storageService
-      const currentList = storageService.getMovies();
-      const existingIdx = currentList.findIndex((m) => m.id === savedMovie.id);
-      if (existingIdx >= 0) {
-        storageService.updateMovie(savedMovie.id, savedMovie);
-      } else {
-        storageService.saveMovies([savedMovie, ...currentList]);
-      }
-
-      // Persist the actual binary video file into IndexedDB so it stays playable permanently
-      await mediaDB.saveVideoBlob(savedMovie.id, file);
-
-      // Reset pending custom poster
-      setPendingPosterDataUrl(null);
-
-      saveMovieToFirestore(savedMovie);
-      onMoviesChanged();
-      setPipelineTab('published');
-      showToast(`"${fileNameClean}" uploaded and saved permanently in SQLite!`);
-
-      // Open description editor right away for the admin
-      openEditModal(savedMovie);
-    } catch (err) {
-      console.error('File Ingestion error:', err);
-      showToast('Error uploading video file from device');
-    } finally {
-      setIsProcessingFile(false);
-      setUploadProgressMsg('');
-      if (videoInputRef.current) videoInputRef.current.value = '';
-    }
-  };
-
-  // Handle custom poster image from device
-  const handleDevicePosterSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      setPendingPosterDataUrl(dataUrl);
-      showToast('Custom poster loaded. It will apply to your uploaded movie.');
-    };
-    reader.readAsDataURL(file);
-  };
 
   // Open edit modal for a movie
   const openEditModal = (movie: Movie) => {
@@ -341,9 +174,8 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
     // Delete locally
     storageService.deleteMultipleMovies(movieIds);
 
-    // Clean up binary media blobs from IndexedDB and server disk
+    // Delete in server database
     movieIds.forEach((id) => {
-      mediaDB.deleteMedia(id);
       apiService.deleteMovie(id);
     });
 
@@ -372,7 +204,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
         </div>
       )}
 
-      {/* Header & Direct Device Upload Card */}
+      {/* Header & Movie Stream Ingestion Card */}
       <div className="bg-[#121216] border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -383,33 +215,14 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
               </h1>
             </div>
             <p className="text-xs text-zinc-400 max-w-2xl leading-relaxed">
-              Upload video master files directly from your computer or phone. Uploaded movies land in
+              Stream and publish movies via lightweight video and poster URLs. Uploaded movies land in
               the <span className="text-amber-400 font-semibold">Awaiting Publication</span> section
               for plot descriptions and synopsis review before going live on the platform.
             </p>
           </div>
 
-          {/* Quick Action Buttons */}
+          {/* Quick Action Button */}
           <div className="flex items-center gap-3">
-            {/* Hidden Video File Input */}
-            <input
-              type="file"
-              ref={videoInputRef}
-              accept="video/mp4,video/webm,video/ogg,video/quicktime,video/mkv,video/*"
-              className="hidden"
-              onChange={handleDeviceVideoSelected}
-            />
-
-            {/* Hidden Poster Image Input */}
-            <input
-              type="file"
-              ref={posterInputRef}
-              accept="image/*"
-              className="hidden"
-              onChange={handleDevicePosterSelected}
-            />
-
-            {/* Add / Upload Movie Button (Opens new comprehensive upload modal) */}
             <button
               onClick={() => {
                 setEditingMovie(null);
@@ -418,18 +231,10 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
               className="flex items-center gap-2 bg-[#F20D28] hover:bg-[#d60b23] text-white font-bold text-xs md:text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-red-700/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Add / Upload Movie</span>
+              <span>Add Movie via Stream URL</span>
             </button>
           </div>
         </div>
-
-        {/* Processing Indicator */}
-        {isProcessingFile && (
-          <div className="p-3 bg-red-950/40 border border-red-800/40 rounded-xl flex items-center gap-3 text-xs text-red-200">
-            <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin shrink-0" />
-            <span>{uploadProgressMsg}</span>
-          </div>
-        )}
       </div>
 
       {/* Two Pipeline Sections Navigation */}
@@ -547,23 +352,34 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
               <Clock className="w-12 h-12 text-amber-500/50 mx-auto" />
               <h3 className="text-base font-bold text-white">No Movies Awaiting Publication</h3>
               <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                When you upload movie video files from your device, they arrive here so you can add
-                the plot summary, genres, cast, and review everything before publishing.
+                Paste a video stream URL and poster image URL to add new titles for plot review before publishing.
               </p>
               <button
-                onClick={() => videoInputRef.current?.click()}
-                className="bg-red-600 hover:bg-red-500 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-lg shadow-red-700/30"
+                onClick={() => {
+                  setEditingMovie(null);
+                  setShowEditModal(true);
+                }}
+                className="bg-red-600 hover:bg-red-500 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-lg shadow-red-700/30 cursor-pointer"
               >
-                Upload Video from Device
+                Add Movie via Stream URL
               </button>
             </>
           ) : (
             <>
               <Film className="w-12 h-12 text-zinc-600 mx-auto" />
-              <h3 className="text-base font-bold text-white">No Published Movies on Live Feed</h3>
+              <h3 className="text-base font-bold text-white">No movies available. Add a video URL to get started.</h3>
               <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                No titles are currently visible to viewers. Upload a movie from your device, add descriptions, and click Publish!
+                No titles are currently visible to viewers. Add a video stream URL and poster image URL to start streaming!
               </p>
+              <button
+                onClick={() => {
+                  setEditingMovie(null);
+                  setShowEditModal(true);
+                }}
+                className="bg-red-600 hover:bg-red-500 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-lg shadow-red-700/30 cursor-pointer"
+              >
+                Add Movie via Stream URL
+              </button>
             </>
           )}
         </div>
@@ -588,7 +404,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
                   </th>
                   <th className="py-3 px-4">Title & Poster</th>
                   <th className="py-3 px-4">Genre / Duration</th>
-                  <th className="py-3 px-4">File Size & Source</th>
+                  <th className="py-3 px-4">Stream URL & Source</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
@@ -626,7 +442,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
                             className="w-12 h-16 rounded-lg overflow-hidden bg-zinc-800 shrink-0 cursor-pointer relative group border border-white/10"
                           >
                             <img
-                              src={movie.thumbnail_url}
+                              src={movie.poster_url || movie.thumbnail_url}
                               alt={movie.title}
                               referrerPolicy="no-referrer"
                               className="w-full h-full object-cover transition-transform group-hover:scale-105"
@@ -665,13 +481,13 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
                         </span>
                       </td>
 
-                      {/* File Size */}
+                      {/* Stream Source URL */}
                       <td className="py-3 px-4">
-                        <span className="font-mono text-zinc-200 block font-semibold">
-                          {(movie.file_size_mb / 1024).toFixed(2)} GB
+                        <span className="font-mono text-zinc-200 block font-semibold truncate max-w-xs" title={movie.video_url || movie.file_url}>
+                          {movie.video_url || movie.file_url}
                         </span>
                         <span className="text-[10px] text-zinc-400 truncate max-w-xs block font-mono">
-                          {movie.file_url.startsWith('blob:') ? 'Local Device Stream' : 'Cloud Master'}
+                          {(movie.video_url || movie.file_url).startsWith('http') ? 'Online Stream URL' : 'Direct URL Stream'}
                         </span>
                       </td>
 

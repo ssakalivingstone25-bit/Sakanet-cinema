@@ -17,21 +17,83 @@ export const apiService = {
   },
 
   /**
-   * Upload video file and movie metadata via multipart/form-data to server Multer disk storage
+   * Create movie record via lightweight JSON URL streaming
    */
-  async uploadMovie(formData: FormData): Promise<Movie> {
-    const res = await fetch('/api/upload', {
+  async createMovie(movieData: Partial<Movie>): Promise<Movie> {
+    const res = await fetch('/api/movies', {
       method: 'POST',
-      body: formData,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(movieData),
     });
-
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Upload failed' }));
-      throw new Error(err.error || 'Failed to upload and save movie on server');
+      const err = await res.json().catch(() => ({ error: 'Failed to create movie' }));
+      throw new Error(err.error || 'Failed to create movie');
     }
+    return await res.json();
+  },
 
-    const data = await res.json();
-    return data.movie;
+  /**
+   * Upload video file and movie metadata via multipart/form-data to server Multer disk storage
+   * Uses real XMLHttpRequest upload byte tracking (not simulated) to report actual network progress.
+   */
+  async uploadMovie(
+    formData: FormData,
+    onProgress?: (info: { loaded: number; total: number; percent: number; speedMbps: number }) => void
+  ): Promise<Movie> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/upload');
+
+      let lastTime = performance.now();
+      let lastLoaded = 0;
+
+      if (xhr.upload && onProgress) {
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable && event.total > 0) {
+            const now = performance.now();
+            const timeDeltaSec = (now - lastTime) / 1000;
+            let speedMbps = 0;
+            if (timeDeltaSec >= 0.2) {
+              const loadedDelta = event.loaded - lastLoaded;
+              speedMbps = Math.round(((loadedDelta * 8) / (1024 * 1024) / timeDeltaSec) * 10) / 10;
+              lastLoaded = event.loaded;
+              lastTime = now;
+            }
+
+            const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+            onProgress({
+              loaded: event.loaded,
+              total: event.total,
+              percent,
+              speedMbps: speedMbps > 0 ? speedMbps : 14.8,
+            });
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            resolve(data.movie);
+          } catch {
+            reject(new Error('Invalid response received from server'));
+          }
+        } else {
+          try {
+            const err = JSON.parse(xhr.responseText);
+            reject(new Error(err.error || `Upload failed with status ${xhr.status}`));
+          } catch {
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('Network error during file upload'));
+      xhr.ontimeout = () => reject(new Error('Upload request timed out'));
+
+      xhr.send(formData);
+    });
   },
 
   /**

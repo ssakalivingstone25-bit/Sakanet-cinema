@@ -32,7 +32,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
       <div className="absolute inset-0">
         {!imgError ? (
           <img
-            src={movie.banner_url || movie.thumbnail_url}
+            src={movie.poster_url || movie.banner_url || movie.thumbnail_url}
             alt={movie.title}
             referrerPolicy="no-referrer"
             onError={() => setImgError(true)}

@@ -1,5 +1,23 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { AlertCircle, RefreshCw, Lock, Unlock } from 'lucide-react';
+import {
+  AlertCircle,
+  RefreshCw,
+  ThumbsUp,
+  ThumbsDown,
+  Share2,
+  Download,
+  Plus,
+  Check,
+  Star,
+  Play,
+  Smartphone,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Film,
+  Sparkles,
+  CheckCircle2,
+} from 'lucide-react';
 import { Movie, VideoPlayerState } from '../../types';
 import { storageService } from '../../services/storageService';
 import { mediaDB } from '../../services/mediaDB';
@@ -7,6 +25,7 @@ import { downloadEngine } from '../../services/downloadEngine';
 import { VideoElement } from './VideoElement';
 import ControlsOverlay from './ControlsOverlay';
 import SettingsMenu from './SettingsMenu';
+import PipPermissionModal from '../PipPermissionModal';
 
 interface VideoPlayerContainerProps {
   movie: Movie | null;
@@ -15,31 +34,52 @@ interface VideoPlayerContainerProps {
   initialTime?: number;
   isOfflinePlayback?: boolean;
   onProgressUpdated?: () => void;
+  allMovies?: Movie[];
+  onSelectMovie?: (m: Movie, startTime?: number) => void;
 }
 
-const FALLBACK_STREAM = '/movies/cinema-master-stream.mp4';
+const resolvePosterImage = (url?: string, fallbackUrl?: string) => {
+  if (url && !url.match(/\.(mp4|webm|mkv|mov)$/i) && !url.startsWith('blob:')) {
+    return url;
+  }
+  if (fallbackUrl && !fallbackUrl.match(/\.(mp4|webm|mkv|mov)$/i) && !fallbackUrl.startsWith('blob:')) {
+    return fallbackUrl;
+  }
+  return '';
+};
 
 export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
-  movie,
+  movie: initialMovie,
   onClose,
   onEnterMiniPlayer,
   initialTime = 0,
   isOfflinePlayback = false,
   onProgressUpdated,
+  allMovies = [],
+  onSelectMovie,
 }) => {
+  // Current active playing movie state
+  const [currentMovie, setCurrentMovie] = useState<Movie | null>(initialMovie);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Sync if prop changes
+  useEffect(() => {
+    if (initialMovie && initialMovie.id !== currentMovie?.id) {
+      setCurrentMovie(initialMovie);
+    }
+  }, [initialMovie]);
+
   // Helper to extract primary video URL from movie
   const getDirectMovieStream = (m: Movie | null): string => {
-    if (!m) return FALLBACK_STREAM;
-    const direct = m.file_url || (m as any).videoUrl || (m.filename ? `/movies/${m.filename}` : '');
-    return direct || FALLBACK_STREAM;
+    if (!m) return '';
+    const direct = m.video_url || m.file_url || (m as any).videoUrl || (m.filename ? `/movies/${m.filename}` : '');
+    return direct || '';
   };
 
   // Stream source
   const [resolvedStreamUrl, setResolvedStreamUrl] = useState<string>(() => {
-    return getDirectMovieStream(movie);
+    return getDirectMovieStream(currentMovie);
   });
 
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -54,14 +94,17 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-  // Landscape and Orientation Lock State
+  // Landscape and Orientation
   const [isLandscapeLocked, setIsLandscapeLocked] = useState<boolean>(false);
-  const [isDeviceLandscape, setIsDeviceLandscape] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth > window.innerHeight;
-    }
-    return false;
-  });
+  const [aspectMode, setAspectMode] = useState<'contain' | 'cover'>('contain');
+
+  const toggleCropAspect = useCallback(() => {
+    setAspectMode((prev) => {
+      const next = prev === 'contain' ? 'cover' : 'contain';
+      showToast(next === 'cover' ? 'Aspect Ratio: Zoom & Fill Screen' : 'Aspect Ratio: Original Fit');
+      return next;
+    });
+  }, []);
 
   // Settings & feedback state
   const [currentQuality, setCurrentQuality] = useState<string>('1080p');
@@ -70,28 +113,56 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
   const [isLiked, setIsLiked] = useState<boolean>(false);
   const [isDisliked, setIsDisliked] = useState<boolean>(false);
   const [isInMyList, setIsInMyList] = useState<boolean>(() => {
-    if (!movie) return false;
-    return storageService.getUser().watchlist.includes(movie.id);
+    if (!currentMovie) return false;
+    return storageService.getUser().watchlist.includes(currentMovie.id);
   });
 
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [showPipGuideModal, setShowPipGuideModal] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState<boolean>(false);
+
+  // Gesture feedback HUD banner
+  const [gestureFeedback, setGestureFeedback] = useState<{
+    type: 'speed' | 'rewind' | 'next';
+    label: string;
+  } | null>(null);
+  const gestureFeedbackTimer = useRef<NodeJS.Timeout | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3200);
   };
 
+  const triggerGestureHUD = (type: 'speed' | 'rewind' | 'next', label: string) => {
+    setGestureFeedback({ type, label });
+    if (gestureFeedbackTimer.current) clearTimeout(gestureFeedbackTimer.current);
+    gestureFeedbackTimer.current = setTimeout(() => {
+      setGestureFeedback(null);
+    }, 1200);
+  };
+
+  // Full Movie Catalog for "Other movies" Feed
+  const catalogMovies = allMovies && allMovies.length > 0
+    ? allMovies
+    : storageService.getMovies();
+
+  const otherMovies = catalogMovies.filter((m) => m.id !== currentMovie?.id);
+
   // 1. Resolve Stream Source
   useEffect(() => {
     let isCancelled = false;
 
     async function resolveSource() {
-      if (!movie) return;
+      if (!currentMovie) return;
       setStreamError(null);
 
       try {
-        const directUrl = movie.file_url || (movie as any).videoUrl || (movie.filename ? `/movies/${movie.filename}` : '');
+        const directUrl =
+          currentMovie.video_url ||
+          currentMovie.file_url ||
+          (currentMovie as any).videoUrl ||
+          (currentMovie.filename ? `/movies/${currentMovie.filename}` : '');
 
         // 1. Direct stream URL (e.g. /movies/... or https://...)
         if (directUrl && !directUrl.startsWith('blob:')) {
@@ -102,7 +173,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
         }
 
         // 2. Persistent IndexedDB Blob cache
-        const indexedDbUrl = await mediaDB.getVideoBlobUrl(movie.id);
+        const indexedDbUrl = await mediaDB.getVideoBlobUrl(currentMovie.id);
         if (indexedDbUrl && !isCancelled) {
           setResolvedStreamUrl(indexedDbUrl);
           return;
@@ -115,12 +186,18 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
         }
 
         if (!isCancelled) {
-          setResolvedStreamUrl(FALLBACK_STREAM);
+          if (directUrl) {
+            setResolvedStreamUrl(directUrl);
+          } else {
+            setResolvedStreamUrl('');
+            setStreamError('No video stream link configured for this title.');
+          }
         }
       } catch (err) {
         console.warn('Error resolving movie stream source:', err);
         if (!isCancelled) {
-          setResolvedStreamUrl(FALLBACK_STREAM);
+          setResolvedStreamUrl('');
+          setStreamError('Unable to load video stream for this title.');
         }
       }
     }
@@ -129,42 +206,43 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [movie]);
+  }, [currentMovie]);
 
-  // 2. Auto-rotate to Full Landscape View when device turns horizontal
+  // 2. Auto-Trigger Picture-in-Picture (Screen pop up) when user exits application
+  // "The app triggers a 'Screen pop up (PiP)' when a user exits the application while a video is playing.
+  // This requires 'Display over other apps' permissions. A note specifies: 'Requires to go to phone settings to allow/turn on.'"
   useEffect(() => {
-    const handleOrientationOrResize = async () => {
-      const isLandscape = window.innerWidth > window.innerHeight;
-      setIsDeviceLandscape(isLandscape);
-
-      // If user rotates phone horizontally, automatically enter fullscreen landscape mode
-      if (isLandscape && !document.fullscreenElement && containerRef.current) {
+    const handleVisibilityChange = async () => {
+      if (document.hidden && isPlaying && videoRef.current) {
         try {
-          if (containerRef.current.requestFullscreen) {
-            await containerRef.current.requestFullscreen();
-          } else if ((containerRef.current as any).webkitRequestFullscreen) {
-            await (containerRef.current as any).webkitRequestFullscreen();
+          if (document.pictureInPictureEnabled && !document.pictureInPictureElement) {
+            await videoRef.current.requestPictureInPicture();
+          } else if (onEnterMiniPlayer && currentMovie) {
+            onEnterMiniPlayer(currentMovie, videoRef.current.currentTime, true);
           }
-          setIsFullscreen(true);
-
-          // Attempt screen orientation lock if available in browser
-          if (screen.orientation && (screen.orientation as any).lock) {
-            (screen.orientation as any).lock('landscape').catch(() => {});
-          }
-        } catch (e) {
-          console.warn('Auto landscape fullscreen request notice:', e);
+        } catch (err) {
+          console.warn('Auto PiP on exit failed (requires display over other apps):', err);
         }
       }
     };
 
-    window.addEventListener('resize', handleOrientationOrResize);
-    window.addEventListener('orientationchange', handleOrientationOrResize);
+    const handleWindowBlur = async () => {
+      // In mobile web / Android WebView, window blur triggers when switching apps
+      if (isPlaying && videoRef.current && document.pictureInPictureEnabled && !document.pictureInPictureElement) {
+        try {
+          await videoRef.current.requestPictureInPicture();
+        } catch {}
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
 
     return () => {
-      window.removeEventListener('resize', handleOrientationOrResize);
-      window.removeEventListener('orientationchange', handleOrientationOrResize);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
     };
-  }, []);
+  }, [isPlaying, currentMovie, onEnterMiniPlayer]);
 
   // 3. Play / Pause Toggle
   const togglePlay = useCallback(() => {
@@ -174,7 +252,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
         .play()
         .then(() => setIsPlaying(true))
         .catch((err) => {
-          console.warn('Playback blocked by browser policy, attempting muted play:', err);
+          console.warn('Playback blocked, attempting muted play:', err);
           if (videoRef.current) {
             videoRef.current.muted = true;
             setIsMuted(true);
@@ -184,16 +262,16 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
-      if (movie) {
+      if (currentMovie) {
         storageService.saveWatchProgress(
-          movie.id,
+          currentMovie.id,
           videoRef.current.currentTime,
-          videoRef.current.duration || movie.duration_minutes * 60
+          videoRef.current.duration || currentMovie.duration_minutes * 60
         );
         onProgressUpdated?.();
       }
     }
-  }, [movie, onProgressUpdated]);
+  }, [currentMovie, onProgressUpdated]);
 
   // 4. Seek
   const handleSeek = useCallback((targetTime: number) => {
@@ -225,135 +303,272 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     }
   }, [isMuted, volume]);
 
-  // 6. Fullscreen & Landscape Locking
+  // 6. Fullscreen & Landscape Rotation Toggle
+  // "Bottom Right Icons: Features an Other Controls button and a Full Screen / Play toggle that rotates the display to landscape mode."
   const toggleFullscreen = useCallback(async () => {
     const elem = containerRef.current || document.documentElement;
-    if (!document.fullscreenElement) {
+
+    if (!document.fullscreenElement && !isFullscreen) {
       try {
         if (elem.requestFullscreen) {
           await elem.requestFullscreen();
         } else if ((elem as any).webkitRequestFullscreen) {
-          (elem as any).webkitRequestFullscreen();
+          await (elem as any).webkitRequestFullscreen();
         }
         setIsFullscreen(true);
-        // Lock landscape on mobile
+
+        // Rotate display to landscape mode via Screen Orientation API
         if (screen.orientation && (screen.orientation as any).lock) {
-          (screen.orientation as any).lock('landscape').catch(() => {});
-          setIsLandscapeLocked(true);
+          try {
+            await (screen.orientation as any).lock('landscape');
+            setIsLandscapeLocked(true);
+          } catch (e) {
+            console.warn('Orientation lock notice:', e);
+          }
         }
       } catch (err) {
         console.warn('Fullscreen request failed:', err);
+        setIsFullscreen(true);
       }
     } else {
       try {
         if (document.exitFullscreen) {
           await document.exitFullscreen();
         } else if ((document as any).webkitExitFullscreen) {
-          (document as any).webkitExitFullscreen();
-        }
-        setIsFullscreen(false);
-        if (screen.orientation && (screen.orientation as any).unlock) {
-          (screen.orientation as any).unlock();
-          setIsLandscapeLocked(false);
+          await (document as any).webkitExitFullscreen();
         }
       } catch (err) {
         console.warn('Exit fullscreen notice:', err);
       }
+      setIsFullscreen(false);
+      if (screen.orientation && (screen.orientation as any).unlock) {
+        try {
+          (screen.orientation as any).unlock();
+          setIsLandscapeLocked(false);
+        } catch {}
+      }
     }
+  }, [isFullscreen]);
+
+  // Fullscreen change listener
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isFs = !!document.fullscreenElement;
+      setIsFullscreen(isFs);
+      if (!isFs && screen.orientation && (screen.orientation as any).unlock) {
+        try {
+          (screen.orientation as any).unlock();
+          setIsLandscapeLocked(false);
+        } catch {}
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
   }, []);
 
-  // Manual Landscape Lock Button
-  const toggleLandscapeLock = useCallback(async () => {
-    if (!isLandscapeLocked) {
-      try {
-        if (!document.fullscreenElement && containerRef.current) {
-          if (containerRef.current.requestFullscreen) {
-            await containerRef.current.requestFullscreen();
-          } else if ((containerRef.current as any).webkitRequestFullscreen) {
-            (containerRef.current as any).webkitRequestFullscreen();
-          }
-          setIsFullscreen(true);
-        }
-        if (screen.orientation && (screen.orientation as any).lock) {
-          await (screen.orientation as any).lock('landscape');
-        }
-        setIsLandscapeLocked(true);
-        showToast('Landscape view locked');
-      } catch {
-        setIsLandscapeLocked(true);
-        showToast('Orientation fixed to Landscape');
-      }
-    } else {
-      if (screen.orientation && (screen.orientation as any).unlock) {
-        (screen.orientation as any).unlock();
-      }
-      setIsLandscapeLocked(false);
-      showToast('Landscape lock released');
-    }
-  }, [isLandscapeLocked]);
-
-  // 7. Picture-in-Picture
+  // 7. Picture-in-Picture Manual Trigger
   const handleTogglePiP = useCallback(async () => {
     setShowSettings(false);
-    if (!videoRef.current || !movie) return;
-
-    if (onEnterMiniPlayer) {
-      const cur = videoRef.current.currentTime;
-      const playing = !videoRef.current.paused;
-      storageService.saveWatchProgress(
-        movie.id,
-        cur,
-        videoRef.current.duration || movie.duration_minutes * 60
-      );
-      onProgressUpdated?.();
-      onEnterMiniPlayer(movie, cur, playing);
-      return;
-    }
+    if (!videoRef.current || !currentMovie) return;
 
     try {
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
+        showToast('Exited Picture-in-Picture');
       } else if (document.pictureInPictureEnabled) {
         await videoRef.current.requestPictureInPicture();
+        showToast('Screen pop up (PiP) active');
+      } else if (onEnterMiniPlayer) {
+        const cur = videoRef.current.currentTime;
+        const playing = !videoRef.current.paused;
+        onEnterMiniPlayer(currentMovie, cur, playing);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('PiP error:', e);
+      setShowPipGuideModal(true);
     }
-  }, [movie, onEnterMiniPlayer, onProgressUpdated]);
+  }, [currentMovie, onEnterMiniPlayer]);
 
-  // 8. Download Video File
+  // 8. Next Content Handler (skips to next movie in feed)
+  const handleNextMovie = useCallback(() => {
+    if (!otherMovies || otherMovies.length === 0) {
+      handleSeek(currentTime + 10);
+      showToast('No more movies in feed');
+      return;
+    }
+    const next = otherMovies[0];
+    setCurrentMovie(next);
+    setCurrentTime(0);
+    setIsPlaying(true);
+    triggerGestureHUD('next', `Playing "${next.title}"`);
+    showToast(`Next: ${next.title}`);
+  }, [otherMovies, currentTime, handleSeek]);
+
+  // 9. Gestures & Navigation
+  // "The application uses swipe and tap gestures to control video playback speed and UI visibility:
+  // Left Swipe: Speeds up playback or skips to the next content.
+  // Right Swipe: Speeds up the video or initiates a speed rewind (backwards).
+  // Screen Tap: Toggles the visibility of the media controls overlay. Tapping once makes controls disappear, and tapping again makes them reappear."
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+        time: performance.now(),
+      };
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || e.changedTouches.length === 0) return;
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const deltaX = endX - touchStartRef.current.x;
+    const deltaY = endY - touchStartRef.current.y;
+    const timeDelta = performance.now() - touchStartRef.current.time;
+
+    // Horizontal swipe detection: distance > 45px and more horizontal than vertical
+    if (Math.abs(deltaX) > 45 && Math.abs(deltaX) > Math.abs(deltaY) * 1.3 && timeDelta < 800) {
+      if (deltaX < -45) {
+        // Left Swipe: Speeds up playback or skips to next content
+        if (Math.abs(deltaX) > 130) {
+          // Far swipe skips to next content
+          handleNextMovie();
+        } else {
+          // Moderate left swipe speeds up playback
+          const nextSpeed = playbackSpeed === 1 ? 2 : playbackSpeed === 2 ? 1.5 : 1;
+          setPlaybackSpeed(nextSpeed);
+          triggerGestureHUD('speed', `${nextSpeed}x Playback Speed`);
+        }
+      } else if (deltaX > 45) {
+        // Right Swipe: Speeds up the video or initiates a speed rewind (backwards 10s)
+        const newTime = Math.max(0, currentTime - 10);
+        handleSeek(newTime);
+        triggerGestureHUD('rewind', 'Speed Rewind (-10s)');
+      }
+    }
+    touchStartRef.current = null;
+  };
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+
+      switch (e.key) {
+        case ' ':
+        case 'k':
+        case 'K':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowLeft':
+        case 'j':
+        case 'J':
+          e.preventDefault();
+          handleSeek(currentTime - 10);
+          triggerGestureHUD('rewind', 'Speed Rewind (-10s)');
+          break;
+        case 'ArrowRight':
+        case 'l':
+        case 'L':
+          e.preventDefault();
+          handleSeek(currentTime + 10);
+          triggerGestureHUD('speed', '+10s Forward');
+          break;
+        case 'n':
+        case 'N':
+          e.preventDefault();
+          handleNextMovie();
+          break;
+        case 'm':
+        case 'M':
+          e.preventDefault();
+          toggleMute();
+          break;
+        case 'f':
+        case 'F':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'p':
+        case 'P':
+          e.preventDefault();
+          handleTogglePiP();
+          break;
+        case 'Escape':
+          if (isFullscreen) {
+            toggleFullscreen();
+          } else {
+            handleCloseWithSave();
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    togglePlay,
+    handleSeek,
+    handleNextMovie,
+    toggleMute,
+    toggleFullscreen,
+    handleTogglePiP,
+    currentTime,
+    isFullscreen,
+  ]);
+
+  // Switch movie selection from content feed
+  const handleSelectFeedMovie = (m: Movie) => {
+    if (videoRef.current && currentMovie) {
+      storageService.saveWatchProgress(
+        currentMovie.id,
+        videoRef.current.currentTime,
+        videoRef.current.duration || currentMovie.duration_minutes * 60
+      );
+      onProgressUpdated?.();
+    }
+    setCurrentMovie(m);
+    setCurrentTime(0);
+    setIsPlaying(true);
+    showToast(`Now playing: ${m.title}`);
+  };
+
+  // Download Video File (Real time stream download)
   const handleDownload = useCallback(() => {
     setShowSettings(false);
-    if (!movie) return;
-    downloadEngine.triggerDownload(movie);
-    showToast(`Downloading "${movie.title}" for offline playback...`);
-  }, [movie]);
+    if (!currentMovie) return;
+    downloadEngine.triggerDownload(currentMovie);
+    showToast(`Downloading "${currentMovie.title}" (Real network transfer)...`);
+  }, [currentMovie]);
 
-  // 9. Open Settings Menu Handler
-  const handleOpenSettingsMenu = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowSettings((prev) => !prev);
-  }, []);
-
-  // 10. Subtitles Toggle shortcut
+  // Subtitles Toggle
   const handleToggleSubtitles = useCallback(() => {
     setCurrentSubtitle((prev) => (prev === 'Off' ? 'English [CC]' : 'Off'));
     showToast(currentSubtitle === 'Off' ? 'Subtitles: English [CC]' : 'Subtitles: Off');
   }, [currentSubtitle]);
 
-  // 11. Toolbar Action Handlers
+  // Toolbar Action Handlers
   const handleToggleMyList = useCallback(() => {
-    if (!movie) return;
-    const inList = storageService.toggleWatchlist(movie.id);
+    if (!currentMovie) return;
+    const inList = storageService.toggleWatchlist(currentMovie.id);
     setIsInMyList(inList);
     showToast(inList ? 'Added to My List' : 'Removed from My List');
-  }, [movie]);
+  }, [currentMovie]);
 
   const handleLike = useCallback(() => {
     setIsLiked((prev) => {
       const next = !prev;
       if (next) setIsDisliked(false);
-      showToast(next ? 'Liked film' : 'Removed like');
+      showToast(next ? 'Liked movie' : 'Removed like');
       return next;
     });
   }, []);
@@ -362,17 +577,17 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     setIsDisliked((prev) => {
       const next = !prev;
       if (next) setIsLiked(false);
-      showToast(next ? 'Disliked film' : 'Removed dislike');
+      showToast(next ? 'Disliked movie' : 'Removed dislike');
       return next;
     });
   }, []);
 
   const handleShare = useCallback(() => {
-    if (navigator.share && movie) {
+    if (navigator.share && currentMovie) {
       navigator
         .share({
-          title: movie.title,
-          text: `Watch "${movie.title}" on Sakanet Cinema`,
+          title: currentMovie.title,
+          text: `Watch "${currentMovie.title}" on Sakanet Cinema`,
           url: window.location.href,
         })
         .catch(() => {});
@@ -380,7 +595,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       navigator.clipboard?.writeText(window.location.href);
       showToast('Movie link copied to clipboard!');
     }
-  }, [movie]);
+  }, [currentMovie]);
 
   // Time update listener
   const handleTimeUpdate = useCallback(() => {
@@ -401,115 +616,30 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
       .play()
       .then(() => setIsPlaying(true))
       .catch((err) => {
-        console.warn('Initial autoplay unmuted blocked by browser policy:', err);
+        console.warn('Initial autoplay blocked by policy:', err);
         setIsPlaying(false);
       });
   }, [initialTime]);
 
   const handleVideoError = () => {
     console.warn('Video playback error for URL:', resolvedStreamUrl);
-    if (resolvedStreamUrl !== FALLBACK_STREAM) {
-      setResolvedStreamUrl(FALLBACK_STREAM);
-      showToast('Switched to master high-definition backup stream');
-    } else {
-      setStreamError('Playback failed. Please check network connection or master video file.');
-    }
+    setStreamError('Video stream failed to load or is unreachable. Please verify the streaming URL.');
   };
-
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
-
-      switch (e.key) {
-        case ' ':
-        case 'k':
-        case 'K':
-          e.preventDefault();
-          togglePlay();
-          break;
-        case 'ArrowLeft':
-        case 'j':
-        case 'J':
-          e.preventDefault();
-          handleSeek(currentTime - 10);
-          break;
-        case 'ArrowRight':
-        case 'l':
-        case 'L':
-          e.preventDefault();
-          handleSeek(currentTime + 10);
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          handleVolumeChange(Math.min(1, volume + 0.1));
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          handleVolumeChange(Math.max(0, volume - 0.1));
-          break;
-        case 'm':
-        case 'M':
-          e.preventDefault();
-          toggleMute();
-          break;
-        case 'f':
-        case 'F':
-          e.preventDefault();
-          toggleFullscreen();
-          break;
-        case 'p':
-        case 'P':
-          e.preventDefault();
-          handleTogglePiP();
-          break;
-        case 'c':
-        case 'C':
-          e.preventDefault();
-          handleToggleSubtitles();
-          break;
-        case 'Escape':
-          if (isFullscreen) {
-            if (document.exitFullscreen) {
-              document.exitFullscreen().catch(() => {});
-            }
-            setIsFullscreen(false);
-          } else {
-            handleCloseWithSave();
-          }
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    togglePlay,
-    handleSeek,
-    handleVolumeChange,
-    toggleMute,
-    toggleFullscreen,
-    handleTogglePiP,
-    handleToggleSubtitles,
-    currentTime,
-    volume,
-    isFullscreen,
-  ]);
 
   // Save progress on close or unmount
   const handleCloseWithSave = useCallback(() => {
-    if (movie && videoRef.current) {
+    if (currentMovie && videoRef.current) {
       storageService.saveWatchProgress(
-        movie.id,
+        currentMovie.id,
         videoRef.current.currentTime,
-        videoRef.current.duration || movie.duration_minutes * 60
+        videoRef.current.duration || currentMovie.duration_minutes * 60
       );
       onProgressUpdated?.();
     }
     onClose();
-  }, [movie, onClose, onProgressUpdated]);
+  }, [currentMovie, onClose, onProgressUpdated]);
 
-  if (!movie) return null;
+  if (!currentMovie) return null;
 
   const playerState: VideoPlayerState = {
     isPlaying,
@@ -521,40 +651,56 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
     isFullscreen,
   };
 
-  const availableQualities = movie.video_qualities || ['4K UHD', '1080p', '720p', '480p'];
-  const availableSubtitles = movie.subtitles || ['English [CC]', 'Luganda', 'French'];
-  const availableAudioTracks = movie.audio_tracks || [
+  const availableQualities = currentMovie.video_qualities || ['4K UHD', '1080p', '720p', '480p'];
+  const availableSubtitles = currentMovie.subtitles || ['English [CC]', 'Luganda', 'French'];
+  const availableAudioTracks = currentMovie.audio_tracks || [
     'Default (Stereo)',
     'Luganda [VJ Translation]',
     'Original English',
   ];
 
-  const vjLabel = movie.vj_name || movie.director || 'VJ Junior';
+  const vjLabel = currentMovie.vj_name || currentMovie.director || 'VJ Junior';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-0 select-none">
-      <div
-        ref={containerRef}
-        className="relative w-full h-full max-w-none bg-black overflow-hidden select-none font-sans flex items-center justify-center"
-      >
-        {/* Toast Alert */}
-        {toastMessage && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-purple-700/90 backdrop-blur-md text-white text-xs font-semibold px-4 py-2 rounded-full shadow-2xl animate-in fade-in slide-in-from-top-2 border border-purple-400/40">
-            {toastMessage}
-          </div>
-        )}
+    <div
+      ref={containerRef}
+      className={`fixed inset-0 z-50 bg-[#0a0a0f] text-white flex flex-col select-none overflow-hidden ${
+        isFullscreen ? 'p-0 w-screen h-screen' : ''
+      }`}
+    >
+      {/* Toast Alert */}
+      {toastMessage && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-red-600/95 backdrop-blur-md text-white text-xs font-semibold px-4 py-2 rounded-full shadow-2xl animate-in fade-in slide-in-from-top-2 border border-red-400/40">
+          {toastMessage}
+        </div>
+      )}
 
+      {/* ========================================================
+          1. VIDEO PLAYBACK WINDOW (Top Container, 16:9 YT-like)
+          - Displays video content
+          - Media controls overlay on top
+          - Handles Left & Right swipe gestures and tap toggles
+         ======================================================== */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className={`relative w-full bg-black flex items-center justify-center shrink-0 overflow-hidden transition-all duration-300 ${
+          isFullscreen
+            ? 'h-full w-full'
+            : 'aspect-video max-h-[50vh] sm:max-h-[60vh] w-full border-b border-white/10 shadow-2xl'
+        }`}
+      >
         {/* Video Element */}
         {resolvedStreamUrl ? (
           <VideoElement
             key={resolvedStreamUrl}
             ref={videoRef}
             streamUrl={resolvedStreamUrl}
-            fallbackStreamUrl={FALLBACK_STREAM}
-            posterUrl={movie.banner_url || movie.thumbnail_url}
+            posterUrl={resolvePosterImage(currentMovie?.poster_url || currentMovie?.banner_url, currentMovie?.thumbnail_url)}
             playbackSpeed={playbackSpeed}
             volume={volume}
             isMuted={isMuted}
+            objectFit={aspectMode}
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onWaiting={() => setIsBuffering(true)}
@@ -563,8 +709,11 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
             onClick={togglePlay}
             onEnded={() => {
               setIsPlaying(false);
-              storageService.clearWatchProgress(movie.id);
+              if (currentMovie) {
+                storageService.clearWatchProgress(currentMovie.id);
+              }
               onProgressUpdated?.();
+              handleNextMovie();
             }}
           />
         ) : null}
@@ -572,7 +721,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
         {/* Buffering Indicator */}
         {isBuffering && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-30">
-            <div className="w-14 h-14 border-4 border-red-600/40 border-t-red-600 rounded-full animate-spin shadow-2xl" />
+            <div className="w-12 h-12 border-4 border-red-600/40 border-t-red-600 rounded-full animate-spin shadow-2xl" />
           </div>
         )}
 
@@ -589,9 +738,15 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
             <button
               onClick={() => {
                 setStreamError(null);
-                setResolvedStreamUrl(FALLBACK_STREAM);
+                const stream = getDirectMovieStream(currentMovie);
+                if (stream) {
+                  setResolvedStreamUrl('');
+                  setTimeout(() => setResolvedStreamUrl(stream), 50);
+                } else {
+                  setStreamError('No video stream link configured for this title.');
+                }
               }}
-              className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-colors"
+              className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-colors cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Retry Playback</span>
@@ -599,55 +754,33 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           </div>
         )}
 
-        {/* Floating Quick Landscape Lock Toggle Button */}
-        <div className="absolute top-4 right-16 sm:right-24 z-40">
-          <button
-            onClick={toggleLandscapeLock}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-md transition-all shadow-lg cursor-pointer ${
-              isLandscapeLocked
-                ? 'bg-red-600 text-white border border-red-400'
-                : 'bg-black/60 hover:bg-black/85 text-zinc-300 border border-white/20'
-            }`}
-            title="Lock Landscape Orientation"
-          >
-            {isLandscapeLocked ? (
-              <>
-                <Lock className="w-3 h-3 text-red-200" />
-                <span>Locked 16:9</span>
-              </>
-            ) : (
-              <>
-                <Unlock className="w-3 h-3 text-zinc-400" />
-                <span className="hidden sm:inline">Auto Rotate</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Controls Overlay (Ghost style, bold highlight on click, auto-fade, only pauses on center icon) */}
+        {/* Media Controls Overlay (Exact Match to User Reference Screenshot) */}
         <ControlsOverlay
           state={playerState}
-          movieTitle={movie.title}
-          studioName={vjLabel}
-          categoryTag={movie.genre}
-          currentQuality={currentQuality}
-          currentSubtitle={currentSubtitle}
-          isSubtitlesActive={currentSubtitle !== 'Off'}
+          movieTitle={currentMovie.title}
           onPlayPause={togglePlay}
           onSeek={handleSeek}
-          onVolumeChange={handleVolumeChange}
           onToggleMute={toggleMute}
           onToggleFullscreen={toggleFullscreen}
-          onOpenSettingsMenu={handleOpenSettingsMenu}
-          onToggleSubtitles={handleToggleSubtitles}
+          onOpenSettingsMenu={(e) => {
+            e.stopPropagation();
+            setShowSettings((prev) => !prev);
+          }}
+          onTogglePiP={handleTogglePiP}
+          onToggleOrientationLock={toggleFullscreen}
+          isOrientationLocked={isLandscapeLocked}
+          onToggleCrop={toggleCropAspect}
+          isCropActive={aspectMode === 'cover'}
           onClose={handleCloseWithSave}
-          onToggleMyList={handleToggleMyList}
-          isInMyList={isInMyList}
-          onLike={handleLike}
-          isLiked={isLiked}
-          onDislike={handleDislike}
-          isDisliked={isDisliked}
-          onShare={handleShare}
+          onNextEpisode={handleNextMovie}
+          onCast={() => {
+            if ((videoRef.current as any)?.remote?.prompt) {
+              (videoRef.current as any).remote.prompt().catch(() => {});
+            } else {
+              showToast('Device Cast Ready');
+            }
+          }}
+          gestureFeedback={gestureFeedback}
         />
 
         {/* Settings Flyout Modal */}
@@ -687,6 +820,273 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           />
         )}
       </div>
+
+      {/* ========================================================
+          2. CONTENT FEED (Scrollable List Below Main Video Player)
+          "Below the main video player, a scrollable list is dedicated
+           to displaying 'Other movies' or recommended content."
+          Hidden during Fullscreen Landscape for cinema immersion.
+         ======================================================== */}
+      {!isFullscreen && (
+        <div className="flex-1 overflow-y-auto bg-[#0a0a0f] text-white">
+          <div className="max-w-4xl mx-auto px-4 py-4 space-y-5">
+            {/* Primary Movie Information Header */}
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h1 className="text-lg sm:text-xl font-black font-display text-white tracking-tight leading-snug">
+                    {currentMovie.title}
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-zinc-400 font-medium">
+                    <span className="text-zinc-300 font-semibold">{currentMovie.release_year || 2024}</span>
+                    <span>•</span>
+                    <span className="bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded text-[11px] font-bold">
+                      {currentMovie.age_rating || '16+'}
+                    </span>
+                    <span>•</span>
+                    <span>{currentMovie.duration_minutes || 120} mins</span>
+                    <span>•</span>
+                    <span className="text-red-400 font-semibold">{currentMovie.genre}</span>
+                  </div>
+                </div>
+
+                {/* Rating Badge (Verifying rating integrity) */}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 shrink-0">
+                  <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                  <span className="text-xs font-bold text-amber-300">
+                    {Number(currentMovie.rating || 5.0).toFixed(1)}
+                  </span>
+                  <span className="text-[10px] text-zinc-400">
+                    ({currentMovie.review_count || 1})
+                  </span>
+                </div>
+              </div>
+
+              {/* VJ Channel Profile Row */}
+              <div className="flex items-center justify-between py-2 border-y border-white/5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-red-950 border border-red-600/40 flex items-center justify-center text-red-400 font-bold overflow-hidden shadow-md">
+                    {currentMovie.vj_avatar_url ? (
+                      <img
+                        src={currentMovie.vj_avatar_url}
+                        alt={vjLabel}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span>{vjLabel.charAt(0)}</span>
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-white">{vjLabel}</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-red-500 fill-red-500 text-black" />
+                    </div>
+                    <span className="text-xs text-zinc-400">Featured VJ Studio • Luganda Translation</span>
+                  </div>
+                </div>
+
+                {/* Display Over Other Apps Permission Badge */}
+                <button
+                  onClick={() => setShowPipGuideModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold text-zinc-200 hover:text-white border border-white/15 transition-all cursor-pointer"
+                  title="Display over other apps (Phone settings)"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-red-400" />
+                  <span className="hidden sm:inline">PiP Settings</span>
+                </button>
+              </div>
+
+              {/* Action Buttons Row: Like, Dislike, Share, Download, Add to List */}
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                {/* Like / Dislike Pill */}
+                <div className="flex items-center rounded-full bg-white/10 border border-white/10 p-0.5 shrink-0">
+                  <button
+                    onClick={handleLike}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-l-full transition-colors cursor-pointer ${
+                      isLiked ? 'text-red-500 bg-white/15' : 'text-zinc-200 hover:text-white'
+                    }`}
+                  >
+                    <ThumbsUp className={`w-3.5 h-3.5 ${isLiked ? 'fill-current' : ''}`} />
+                    <span>{isLiked ? 'Liked' : 'Like'}</span>
+                  </button>
+                  <div className="w-[1px] h-4 bg-white/15" />
+                  <button
+                    onClick={handleDislike}
+                    className={`px-3 py-1.5 text-xs rounded-r-full transition-colors cursor-pointer ${
+                      isDisliked ? 'text-red-500 bg-white/15' : 'text-zinc-200 hover:text-white'
+                    }`}
+                  >
+                    <ThumbsDown className={`w-3.5 h-3.5 ${isDisliked ? 'fill-current' : ''}`} />
+                  </button>
+                </div>
+
+                {/* Share Button */}
+                <button
+                  onClick={handleShare}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-zinc-200 hover:text-white text-xs font-semibold border border-white/10 shrink-0 transition-colors cursor-pointer"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Share</span>
+                </button>
+
+                {/* Real Stream Download Button */}
+                <button
+                  onClick={handleDownload}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-zinc-200 hover:text-white text-xs font-semibold border border-white/10 shrink-0 transition-colors cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-red-400" />
+                  <span>Download</span>
+                </button>
+
+                {/* Watchlist Button */}
+                <button
+                  onClick={handleToggleMyList}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-zinc-200 hover:text-white text-xs font-semibold border border-white/10 shrink-0 transition-colors cursor-pointer"
+                >
+                  {isInMyList ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-red-500 stroke-[2.5]" />
+                      <span className="text-white">In Watchlist</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Watchlist</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Expandable Synopsis / Description */}
+              <div
+                onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                className="p-3 rounded-2xl bg-[#14151c] border border-white/5 text-xs text-zinc-300 space-y-1.5 cursor-pointer hover:bg-[#181922] transition-colors"
+              >
+                <div className="flex items-center justify-between font-bold text-white text-xs">
+                  <span>About this movie</span>
+                  <div className="flex items-center gap-1 text-zinc-400 text-[11px]">
+                    <span>{isDescriptionExpanded ? 'Show less' : 'More'}</span>
+                    {isDescriptionExpanded ? (
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                </div>
+                <p className={`leading-relaxed text-zinc-300 ${isDescriptionExpanded ? '' : 'line-clamp-2'}`}>
+                  {currentMovie.synopsis ||
+                    `Experience the thrilling cinematic release of "${currentMovie.title}", masterfully voiced and translated by ${vjLabel}. High bitrate streaming with seamless Dolby-grade audio.`}
+                </p>
+                {isDescriptionExpanded && (
+                  <div className="pt-2 border-t border-white/5 space-y-1 text-zinc-400 text-[11px]">
+                    <div>
+                      <strong className="text-zinc-200">Director: </strong>
+                      {currentMovie.director || currentMovie.vj_name || 'Livingstone Saka'}
+                    </div>
+                    <div>
+                      <strong className="text-zinc-200">Language: </strong>
+                      {currentMovie.language || 'Luganda [VJ Translated]'}
+                    </div>
+                    <div>
+                      <strong className="text-zinc-200">Cast: </strong>
+                      {Array.isArray(currentMovie.cast) ? currentMovie.cast.join(', ') : 'Lead Performer'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ========================================================
+                CONTENT FEED: "Other movies" / Recommended Content
+               ======================================================== */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Film className="w-4 h-4 text-red-500" />
+                  <h2 className="text-sm font-bold font-display text-white tracking-wide">
+                    Other Movies & Recommended
+                  </h2>
+                </div>
+                <span className="text-xs text-zinc-400 font-medium">
+                  {otherMovies.length} Available
+                </span>
+              </div>
+
+              {otherMovies.length === 0 ? (
+                <div className="p-8 text-center bg-[#121319] border border-white/5 rounded-2xl space-y-2">
+                  <Film className="w-8 h-8 text-zinc-600 mx-auto" />
+                  <p className="text-xs text-zinc-400">No other movies currently in catalog.</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {otherMovies.map((other) => (
+                    <div
+                      key={other.id}
+                      onClick={() => handleSelectFeedMovie(other)}
+                      className="group flex gap-3 p-2 rounded-xl bg-[#121319] hover:bg-[#181923] border border-white/5 hover:border-red-600/30 transition-all cursor-pointer"
+                    >
+                      {/* Thumbnail Container */}
+                      <div className="relative w-32 sm:w-40 aspect-video rounded-lg overflow-hidden bg-black shrink-0 border border-white/10">
+                        <img
+                          src={resolvePosterImage(other.thumbnail_url, other.banner_url)}
+                          alt={other.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        {/* Duration badge */}
+                        <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/85 text-[10px] font-mono font-bold text-zinc-200">
+                          {other.duration_minutes || 120}m
+                        </div>
+                        {/* Play overlay on hover */}
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <div className="w-7 h-7 rounded-full bg-red-600 text-white flex items-center justify-center shadow-lg">
+                            <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Movie Info */}
+                      <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                        <div>
+                          <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-red-400 transition-colors line-clamp-2 leading-tight">
+                            {other.title}
+                          </h3>
+                          <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 mt-1">
+                            <span className="text-zinc-300 font-semibold">{other.vj_name || 'VJ Junior'}</span>
+                            <span>•</span>
+                            <span>{other.genre}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-medium mt-1">
+                          <span className="flex items-center gap-0.5 text-amber-400">
+                            <Star className="w-3 h-3 fill-current" />
+                            {Number(other.rating || 5.0).toFixed(1)}
+                          </span>
+                          <span>•</span>
+                          <span>{other.release_year || 2024}</span>
+                          <span>•</span>
+                          <span className="text-zinc-400">1080p FHD</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Picture-in-Picture & Display Over Other Apps Permission Modal */}
+      <PipPermissionModal
+        isOpen={showPipGuideModal}
+        onClose={() => setShowPipGuideModal(false)}
+        onTestPip={async () => {
+          if (videoRef.current && document.pictureInPictureEnabled) {
+            await videoRef.current.requestPictureInPicture();
+          }
+        }}
+      />
     </div>
   );
 };

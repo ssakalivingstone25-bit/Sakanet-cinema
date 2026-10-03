@@ -229,18 +229,11 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5 text-xs">
-                <div className="p-2 bg-zinc-950/60 rounded-lg">
-                  <span className="text-zinc-500 text-[10px] block uppercase font-medium">Access Level</span>
+              <div className="pt-2 border-t border-white/5 text-xs">
+                <div className="p-2.5 bg-zinc-950/60 rounded-lg flex items-center justify-between">
+                  <span className="text-zinc-500 text-[10px] uppercase font-medium">Access Tier</span>
                   <span className="font-bold text-amber-400">
                     {currentUser.role === 'admin' ? 'Super Admin' : currentUser.tier}
-                  </span>
-                </div>
-                <div className="p-2 bg-zinc-950/60 rounded-lg">
-                  <span className="text-zinc-500 text-[10px] block uppercase font-medium">Offline Quota</span>
-                  <span className="font-mono text-zinc-300">
-                    {(currentUser.download_quota_used_mb / 1024).toFixed(1)} /{' '}
-                    {(currentUser.download_quota_limit_mb / 1024).toFixed(0)} GB
                   </span>
                 </div>
               </div>

@@ -13,8 +13,12 @@ import {
   User,
   ArrowLeft,
   PlusCircle,
+  Sparkles,
+  Sliders,
 } from 'lucide-react';
-import { Movie, DownloadItem, UserProfile, WatchProgress } from '../types';
+import { Movie, DownloadItem, UserProfile, WatchProgress, WatchHistoryItem, RecommendedMovie } from '../types';
+import { recommendationEngine } from '../services/recommendationEngine';
+import { RecommendationPreferencesModal } from './RecommendationPreferencesModal';
 
 interface BrowseCatalogViewProps {
   movies: Movie[];
@@ -32,8 +36,7 @@ interface BrowseCatalogViewProps {
   onTabChange?: (tab: 'settings' | 'browse' | 'downloads' | 'admin') => void;
 }
 
-const DEFAULT_VJ_AVATAR =
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=240&auto=format&fit=crop&q=80';
+const DEFAULT_VJ_AVATAR = '';
 
 export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
   movies,
@@ -64,10 +67,45 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
   // "See All" modals state: null | 'vj' | 'trending' | 'recent'
   const [seeAllModal, setSeeAllModal] = useState<null | 'vj' | 'trending' | 'recent'>(null);
 
+  // User Firestore genre preferences & watch history
+  const [genrePreferences, setGenrePreferences] = useState<string[]>(() => {
+    return user?.genrePreferences || ['Action', 'Sci-Fi'];
+  });
+  const [watchHistory, setWatchHistory] = useState<WatchHistoryItem[]>(() => {
+    return user?.watchHistory || [];
+  });
+  const [showPreferencesModal, setShowPreferencesModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      recommendationEngine.fetchUserPreferencesAndHistory(user.id).then((data) => {
+        if (data.genrePreferences?.length) setGenrePreferences(data.genrePreferences);
+        if (data.watchHistory?.length) setWatchHistory(data.watchHistory);
+      });
+
+      const unsubscribe = recommendationEngine.subscribeToUserPreferences(user.id, (data) => {
+        if (data.genrePreferences?.length) setGenrePreferences(data.genrePreferences);
+        if (data.watchHistory?.length) setWatchHistory(data.watchHistory);
+      });
+
+      return () => unsubscribe();
+    }
+  }, [user?.id]);
+
   // 1. Strictly published movies uploaded by the admin (is_active === true)
   const publishedMovies = useMemo(() => {
     return movies.filter((m) => m.is_active !== false);
   }, [movies]);
+
+  // Personalized Recommendations based on Firestore watch history and genre preferences
+  const recommendedList = useMemo(() => {
+    return recommendationEngine.calculateRecommendations(
+      publishedMovies,
+      genrePreferences,
+      watchHistory,
+      watchlist
+    );
+  }, [publishedMovies, genrePreferences, watchHistory, watchlist]);
 
   // 2. Featured movies for the hero banner carousel
   const featuredMovies = useMemo(() => {
@@ -243,7 +281,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
 
           <button
             onClick={onOpenAuth}
-            className="relative w-9 h-9 rounded-full ring-2 ring-sky-500 overflow-hidden shadow-lg transition-transform hover:scale-105 cursor-pointer focus:outline-none"
+            className="relative w-9 h-9 rounded-full ring-1.5 ring-[#E50914]/60 hover:ring-[#E50914] overflow-hidden shadow-lg transition-transform hover:scale-105 cursor-pointer focus:outline-none"
             title={user?.name ? `${user.name} (Account)` : 'Sign in to Account'}
             aria-label="User Account"
           >
@@ -255,7 +293,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-tr from-sky-600 via-indigo-600 to-blue-700 flex items-center justify-center text-xs font-bold text-white">
+              <div className="w-full h-full bg-gradient-to-tr from-[#E50914] to-zinc-900 flex items-center justify-center text-xs font-bold text-white">
                 {user?.name ? user.name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
               </div>
             )}
@@ -264,37 +302,40 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
       </header>
 
       {/* ========================================================
-          EMPTY STATE (Appears until administrator publishes movies)
+          EMPTY STATE (Fallback when database return is empty)
          ======================================================== */}
       {publishedMovies.length === 0 ? (
-        <div className="bg-[#121319] border border-white/10 rounded-2xl p-10 sm:p-14 text-center space-y-5 my-8 shadow-2xl animate-in fade-in">
-          <div className="w-16 h-16 rounded-2xl bg-red-950/60 border border-[#F20D28]/40 flex items-center justify-center text-[#F20D28] mx-auto shadow-lg shadow-red-950/50">
+        <div className="bg-[#121319] border border-white/10 rounded-2xl p-8 sm:p-14 text-center space-y-5 my-8 shadow-2xl animate-in fade-in">
+          <div className="w-16 h-16 rounded-2xl bg-zinc-950 border border-[#E50914]/40 flex items-center justify-center text-[#E50914] mx-auto shadow-xl">
             <Film className="w-8 h-8" />
           </div>
           <div className="max-w-md mx-auto space-y-2">
-            <h3 className="text-xl font-black font-display text-white">
-              Welcome to SAKANET CINEMA
+            <h3 className="text-xl sm:text-2xl font-bold font-display text-white tracking-tight">
+              Welcome to Sakanet Cinema
             </h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Movies will appear here as soon as they are published by the cinema team. Enjoy seamless HD streaming, VJ translated blockbusters, and fast downloads.
+            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+              The theater catalog is ready. As soon as the administrator publishes titles with direct video stream URLs, movies, trending releases, and VJ translations will appear here instantly.
             </p>
           </div>
-          {isAdmin ? (
-            <div className="pt-2">
+          <div className="pt-2">
+            {isAdmin ? (
               <button
                 onClick={() => onTabChange?.('admin')}
-                className="inline-flex items-center gap-2 bg-[#F20D28] hover:bg-[#d60b23] text-white text-xs font-extrabold px-6 py-3 rounded-full shadow-lg shadow-red-700/40 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-2 bg-[#E50914] hover:bg-[#d60b23] text-white text-xs font-bold px-6 py-3 rounded-xl shadow-lg shadow-red-950/60 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <PlusCircle className="w-4 h-4" />
-                <span>Upload Movie in Admin Portal</span>
+                <span>Open Admin Portal &amp; Add Movie</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
-            </div>
-          ) : (
-            <p className="text-[11px] text-zinc-500 italic">
-              Check back soon! New translated movies will appear here as soon as they are published.
-            </p>
-          )}
+            ) : (
+              <button
+                onClick={onOpenAuth}
+                className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold px-5 py-2.5 rounded-xl border border-white/10 transition-colors cursor-pointer"
+              >
+                <span>Sign In with Admin Account</span>
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <>
@@ -602,6 +643,64 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
           ) : (
             <>
               {/* ========================================================
+                  SECTION 4.5: RECOMMENDED FOR YOU (Firestore Watch History & Preferences)
+                 ======================================================== */}
+              {recommendedList.length > 0 && (
+                <section className="mb-8">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-red-950/80 border border-red-600/40 flex items-center justify-center text-red-500 shadow-md">
+                        <Sparkles className="w-4 h-4 stroke-[2.2]" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-lg sm:text-xl font-bold font-display text-white tracking-tight">
+                            Recommended for You
+                          </h2>
+                          <span className="text-[10px] bg-red-600/20 text-red-400 border border-red-600/30 px-2 py-0.5 rounded-full font-bold">
+                            AI Personalized
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400">
+                          Tailored based on your watch history & genre preferences stored in Firestore
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setShowPreferencesModal(true)}
+                      className="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-zinc-200 hover:text-white border border-white/10 transition-all cursor-pointer shadow-sm active:scale-95"
+                    >
+                      <Sliders className="w-3.5 h-3.5 text-red-400" />
+                      <span>Preferences ({genrePreferences.length})</span>
+                    </button>
+                  </div>
+
+                  {/* Horizontal Recommended Movies Rail with Match Badges and Reasons */}
+                  <div className="flex items-start gap-3.5 sm:gap-4 overflow-x-auto no-scrollbar pb-1">
+                    {recommendedList.slice(0, 10).map(({ movie, matchPercentage, reason }) => (
+                      <div key={movie.id} className="shrink-0 w-36 sm:w-44 group">
+                        <div className="relative">
+                          <MoviePosterCard movie={movie} onSelect={() => onSelectMovie(movie)} />
+                          {/* Match Percentage Pill */}
+                          <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-md border border-red-500/40 text-[10px] font-mono font-black text-red-400 shadow-lg flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5 text-red-500" />
+                            <span>{matchPercentage}% Match</span>
+                          </div>
+                        </div>
+
+                        {/* Recommendation Reason Badge */}
+                        <div className="mt-1.5 px-2 py-1 rounded-lg bg-[#14151e] border border-white/5 text-[10px] text-zinc-300 font-medium truncate flex items-center gap-1.5 shadow-sm">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                          <span className="truncate">{reason.label}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* ========================================================
                   SECTION 5: BROWSE BY VJ (Strictly Real VJs from Uploaded Movies)
                  ======================================================== */}
               {vjProfiles.length > 0 && (
@@ -874,6 +973,15 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Genre Preferences Firestore Modal */}
+      <RecommendationPreferencesModal
+        isOpen={showPreferencesModal}
+        onClose={() => setShowPreferencesModal(false)}
+        userId={user?.id || ''}
+        currentPreferences={genrePreferences}
+        onPreferencesUpdated={(newPrefs) => setGenrePreferences(newPrefs)}
+      />
     </div>
   );
 };

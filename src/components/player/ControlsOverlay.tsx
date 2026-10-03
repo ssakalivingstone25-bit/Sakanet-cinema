@@ -3,106 +3,68 @@ import {
   Play,
   Pause,
   RotateCcw,
-  RotateCw,
+  SkipForward,
   Volume2,
   VolumeX,
   Maximize,
   Minimize,
-  Settings,
-  Subtitles,
+  Sliders,
   ArrowLeft,
-  ChevronDown,
   Cast,
-  MoreVertical,
-  ThumbsUp,
-  ThumbsDown,
-  Share2,
-  Plus,
-  Check,
-  SkipForward,
+  Lock,
+  Unlock,
+  PictureInPicture,
+  Crop,
 } from 'lucide-react';
 import { VideoPlayerState } from '../../types';
 
 interface ControlsOverlayProps {
   state: VideoPlayerState;
-  movieTitle: string;
-  studioName?: string;
-  categoryTag?: string;
-  currentQuality?: string;
-  currentSubtitle?: string;
-  isSubtitlesActive?: boolean;
+  movieTitle?: string;
   onPlayPause: () => void;
   onSeek: (time: number) => void;
-  onVolumeChange: (vol: number) => void;
   onToggleMute: () => void;
   onToggleFullscreen: () => void;
   onOpenSettingsMenu: (e: React.MouseEvent) => void;
-  onOpenQualityMenu?: (e: React.MouseEvent) => void;
-  onToggleSubtitles?: () => void;
-  onClose?: () => void;
+  onTogglePiP: () => void;
+  onToggleOrientationLock: () => void;
+  isOrientationLocked: boolean;
+  onToggleCrop: () => void;
+  isCropActive: boolean;
+  onClose: () => void;
   onNextEpisode?: () => void;
-  onToggleMyList?: () => void;
-  isInMyList?: boolean;
-  onLike?: () => void;
-  isLiked?: boolean;
-  onDislike?: () => void;
-  isDisliked?: boolean;
-  onShare?: () => void;
+  onCast?: () => void;
+  gestureFeedback?: {
+    type: 'speed' | 'rewind' | 'next';
+    label: string;
+  } | null;
 }
-
-const formatTime = (seconds: number) => {
-  if (isNaN(seconds) || seconds < 0) return '00:00';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-
-  if (h > 0) {
-    return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
-  }
-  return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
-};
 
 export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   state,
   movieTitle,
-  studioName = 'Sakanet Cinema',
-  categoryTag = '1080p FHD',
-  currentQuality = '1080p',
-  currentSubtitle = 'Off',
-  isSubtitlesActive = false,
   onPlayPause,
   onSeek,
-  onVolumeChange,
   onToggleMute,
   onToggleFullscreen,
   onOpenSettingsMenu,
-  onOpenQualityMenu,
-  onToggleSubtitles,
+  onTogglePiP,
+  onToggleOrientationLock,
+  isOrientationLocked,
+  onToggleCrop,
+  isCropActive,
   onClose,
   onNextEpisode,
-  onToggleMyList,
-  isInMyList = false,
-  onLike,
-  isLiked = false,
-  onDislike,
-  isDisliked = false,
-  onShare,
+  onCast,
+  gestureFeedback,
 }) => {
-  // Controls visibility with auto-fade timer
-  // When active, controls are "bold highlighted"; when inactive, completely ghost/faded out.
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Transient feedback animation for center tap actions (rewind, forward, play/pause)
-  const [tapFeedback, setTapFeedback] = useState<'rewind' | 'forward' | 'play' | 'pause' | null>(null);
-  const feedbackTimerRef = useRef<NodeJS.Timeout | null>(null);
-
+  // Auto-hide controls after 3.5s of inactivity while video is playing
   const resetHideTimer = () => {
     setControlsVisible(true);
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-    }
-    // Auto fade controls after 3.5 seconds of inactivity if currently playing
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     if (state.isPlaying) {
       hideTimerRef.current = setTimeout(() => {
         setControlsVisible(false);
@@ -114,236 +76,222 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
     resetHideTimer();
     return () => {
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     };
   }, [state.isPlaying]);
 
-  // Handle tap on the main video screen container:
-  // Reclining/tapping again anywhere fades the controls out.
-  // Clicking brings them back bold & highlighted.
-  // ONLY pauses when clicking directly on the center Play/Pause icon.
-  const handleScreenTap = (e: React.MouseEvent) => {
-    // If clicking directly on interactive control buttons, don't toggle screen visibility
-    if ((e.target as HTMLElement).closest('button, input, select, a, [role="button"]')) {
-      resetHideTimer();
+  // Format seconds to mm:ss or hh:mm:ss
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds) || seconds < 0) return '00:00';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) {
+      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // Screen Tap toggle
+  const handleOverlayTap = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('input') || target.closest('[data-no-toggle="true"]')) {
       return;
     }
-
-    if (!state.isPlaying) {
-      // When paused, tapping anywhere starts playback!
-      onPlayPause();
-      triggerFeedback('play');
-      resetHideTimer();
-      return;
-    }
-
-    if (controlsVisible) {
-      setControlsVisible(false);
+    const next = !controlsVisible;
+    setControlsVisible(next);
+    if (!next) {
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     } else {
       resetHideTimer();
     }
   };
 
-  const triggerFeedback = (action: 'rewind' | 'forward' | 'play' | 'pause') => {
-    setTapFeedback(action);
-    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
-    feedbackTimerRef.current = setTimeout(() => {
-      setTapFeedback(null);
-    }, 700);
-  };
-
-  const handleCenterRewind = (e: React.MouseEvent) => {
+  // Rewind 10 seconds
+  const handleRewind10s = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onSeek(state.currentTime - 10);
-    triggerFeedback('rewind');
+    onSeek(Math.max(0, state.currentTime - 10));
     resetHideTimer();
   };
 
-  const handleCenterForward = (e: React.MouseEvent) => {
+  // Next content or Skip Forward 10 seconds
+  const handleNextOrForward = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onSeek(state.currentTime + 10);
-    triggerFeedback('forward');
+    if (onNextEpisode) {
+      onNextEpisode();
+    } else {
+      onSeek(Math.min(state.duration, state.currentTime + 10));
+    }
     resetHideTimer();
   };
 
-  // Center Play/Pause button: The ONLY place where clicking pauses or plays the video
-  const handleCenterPlayPause = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onPlayPause();
-    triggerFeedback(!state.isPlaying ? 'play' : 'pause');
-    resetHideTimer();
-  };
-
-  const progressPercent = state.duration > 0
-    ? (state.currentTime / state.duration) * 100
-    : 0;
+  const progressPercent =
+    state.duration > 0 ? (state.currentTime / state.duration) * 100 : 0;
 
   return (
     <div
-      onClick={handleScreenTap}
+      onClick={handleOverlayTap}
       onMouseMove={resetHideTimer}
       onTouchStart={resetHideTimer}
-      className={`absolute inset-0 flex flex-col justify-between select-none overflow-hidden transition-all duration-300 z-30 ${
+      className={`absolute inset-0 flex flex-col justify-between select-none overflow-hidden transition-opacity duration-300 z-30 ${
         controlsVisible
-          ? 'opacity-100 pointer-events-auto bg-black/40 backdrop-blur-[2px] cursor-default'
+          ? 'opacity-100 pointer-events-auto bg-black/45 cursor-default'
           : 'opacity-0 pointer-events-none bg-transparent cursor-none'
       }`}
     >
-      {/* ========================================================
-          1. TOP APP BAR (Back, Title, VJ • Tag, 1080p pill, CC, Cast, Gear, 3-Dots)
-          Ghost-style frosted bar with bold highlighted typography
-         ======================================================== */}
-      <div
-        className="pt-3 px-4 sm:px-6 pb-4 bg-gradient-to-b from-black/95 via-black/70 to-transparent flex items-start justify-between gap-3 z-30 transition-transform duration-300"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Left: Back button + Title info */}
-        <div className="flex items-center gap-3.5 min-w-0">
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer shrink-0 border border-white/15 shadow-md active:scale-95"
-              title="Back"
-              aria-label="Back"
-            >
-              <ArrowLeft className="w-5 h-5 stroke-[2.5]" />
-            </button>
-          )}
-
-          <div className="flex flex-col min-w-0">
-            <h2 className="text-white text-base sm:text-lg font-black tracking-tight truncate leading-tight drop-shadow-md">
-              {movieTitle}
-            </h2>
-            <div className="flex items-center gap-2 text-xs sm:text-sm text-zinc-200 font-semibold truncate mt-0.5">
-              <span className="text-red-300 bg-red-950/80 px-2 py-0.2 rounded border border-red-800/50">
-                {studioName}
-              </span>
-              {categoryTag && (
-                <>
-                  <span className="text-zinc-500">•</span>
-                  <span className="text-zinc-300">{categoryTag}</span>
-                </>
-              )}
-            </div>
+      {/* Transient Gesture Feedback HUD */}
+      {gestureFeedback && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50">
+          <div className="px-4 py-2 rounded-xl bg-black/85 backdrop-blur-xl border border-white/20 text-white font-bold text-xs shadow-2xl flex items-center gap-2">
+            <span>{gestureFeedback.label}</span>
           </div>
         </div>
+      )}
 
-        {/* Right Top Actions: Quality Pill, CC, Cast, Settings Gear, 3-Dots */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0 pt-0.5">
-          {/* Quality Pill (e.g. 1080p ⌄) */}
+      {/* ========================================================
+          1. TOP BAR
+          - Left: Clean Back Arrow + Movie Title
+          - Right: Horizontal row of subtle white icons:
+            [ Cast ] [ PiP ] [ Mute ] [ Lock ]
+         ======================================================== */}
+      <div
+        className="pt-3 px-3 sm:px-5 pb-2 flex items-center justify-between z-30 transition-transform duration-300"
+        onClick={(e) => e.stopPropagation()}
+        data-no-toggle="true"
+      >
+        {/* Back Button & Title */}
+        <div className="flex items-center gap-2.5 min-w-0 pr-3">
           <button
-            onClick={onOpenQualityMenu || onOpenSettingsMenu}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/70 hover:bg-black/95 border border-white/30 text-white text-xs font-bold shadow-lg transition-all cursor-pointer"
-            title="Video Quality"
+            onClick={onClose}
+            className="p-1.5 rounded-full hover:bg-white/15 text-white transition-colors cursor-pointer drop-shadow-md shrink-0"
+            title="Back to catalog"
+            aria-label="Back"
           >
-            <span>{currentQuality}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-zinc-300" />
+            <ArrowLeft className="w-5 h-5 stroke-[2.2]" />
+          </button>
+          {movieTitle && (
+            <span className="text-xs sm:text-sm font-semibold text-white/95 truncate drop-shadow-md">
+              {movieTitle}
+            </span>
+          )}
+        </div>
+
+        {/* Right Subtle Action Icons Row */}
+        <div className="flex items-center gap-2 sm:gap-3.5 shrink-0">
+          {/* Cast Icon */}
+          <button
+            onClick={onCast}
+            className="p-1.5 rounded-full hover:bg-white/15 text-white/90 hover:text-white transition-colors cursor-pointer drop-shadow-md"
+            title="Cast to Device"
+            aria-label="Cast to Device"
+          >
+            <Cast className="w-4 h-4 stroke-[2]" />
           </button>
 
-          {/* Subtitles / CC button */}
+          {/* Picture-in-Picture Icon */}
           <button
-            onClick={onToggleSubtitles}
-            className={`p-2 rounded-xl transition-all cursor-pointer border ${
-              isSubtitlesActive
-                ? 'text-red-400 bg-red-950/60 border-red-600/50 shadow-md'
-                : 'text-white bg-black/60 hover:bg-white/15 border-white/15'
-            }`}
-            title="Subtitles / Closed Captions"
-            aria-label="Subtitles"
+            onClick={onTogglePiP}
+            className="p-1.5 rounded-full hover:bg-white/15 text-white/90 hover:text-white transition-colors cursor-pointer drop-shadow-md"
+            title="Picture-in-Picture"
+            aria-label="Picture-in-Picture"
           >
-            <Subtitles className="w-4 h-4 stroke-[2.2]" />
+            <PictureInPicture className="w-4 h-4 stroke-[2]" />
           </button>
 
-          {/* Settings Gear */}
+          {/* Volume / Mute Icon */}
           <button
-            onClick={onOpenSettingsMenu}
-            className="p-2 text-white bg-black/60 hover:bg-white/15 rounded-xl border border-white/15 transition-all cursor-pointer shadow-md"
-            title="Settings"
-            aria-label="Settings"
+            onClick={onToggleMute}
+            className="p-1.5 rounded-full hover:bg-white/15 text-white/90 hover:text-white transition-colors cursor-pointer drop-shadow-md"
+            title={state.isMuted ? 'Unmute' : 'Mute'}
+            aria-label={state.isMuted ? 'Unmute' : 'Mute'}
           >
-            <Settings className="w-4 h-4 stroke-[2.2]" />
+            {state.isMuted ? (
+              <VolumeX className="w-4 h-4 stroke-[2]" />
+            ) : (
+              <Volume2 className="w-4 h-4 stroke-[2]" />
+            )}
           </button>
 
-          {/* 3-Dots Overflow Menu */}
+          {/* Screen Orientation Lock Icon */}
           <button
-            onClick={onOpenSettingsMenu}
-            className="p-2 text-white bg-black/60 hover:bg-white/15 rounded-xl border border-white/15 transition-all cursor-pointer shadow-md"
-            title="More Options"
-            aria-label="More Options"
+            onClick={onToggleOrientationLock}
+            className="p-1.5 rounded-full hover:bg-white/15 text-white/90 hover:text-white transition-colors cursor-pointer drop-shadow-md"
+            title={isOrientationLocked ? 'Unlock Orientation' : 'Lock Orientation'}
+            aria-label={isOrientationLocked ? 'Unlock Orientation' : 'Lock Orientation'}
           >
-            <MoreVertical className="w-4 h-4 stroke-[2.2]" />
+            {isOrientationLocked ? (
+              <Lock className="w-4 h-4 stroke-[2]" />
+            ) : (
+              <Unlock className="w-4 h-4 stroke-[2]" />
+            )}
           </button>
         </div>
       </div>
 
       {/* ========================================================
-          2. CENTER CONTROLS (Rewind 10s, Huge Play/Pause Circle, Forward 10s)
-          Featuring tap-to-fade transient animations & bold ghost style
-          NOTE: Only clicking directly on the center Play/Pause icon pauses the stream!
+          2. CENTER PLAYBACK CONTROLS (Proportional & Refined)
+          Center Controls: Includes Play / Pause buttons, a Next button,
+          and a Previous (10s) skip button.
+          - Previous (10s) Skip Button
+          - Play / Pause Button
+          - Next Button
          ======================================================== */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-        <div className="flex items-center gap-6 sm:gap-10 pointer-events-auto">
-          {/* Rewind 10s Circle Button */}
+        <div
+          className="flex items-center justify-center gap-7 sm:gap-12 md:gap-14 pointer-events-auto"
+          data-no-toggle="true"
+        >
+          {/* Previous (10s) Skip Button */}
           <button
-            onClick={handleCenterRewind}
-            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-black/75 hover:bg-black/95 text-white flex items-center justify-center backdrop-blur-md border border-white/25 shadow-2xl transition-all active:scale-90 cursor-pointer ${
-              tapFeedback === 'rewind' ? 'scale-125 bg-red-600/60 border-red-400' : 'hover:scale-105'
-            }`}
-            title="Rewind 10 seconds (←)"
-            aria-label="Rewind 10 seconds"
+            onClick={handleRewind10s}
+            className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-black/40 hover:bg-black/60 text-white flex flex-col items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer backdrop-blur-sm shadow-md"
+            title="Previous (10s) Skip"
+            aria-label="Previous 10 seconds"
           >
-            <div className="relative flex items-center justify-center">
-              <RotateCcw className="w-7 h-7 stroke-[2.2]" />
-              <span className="absolute text-[10px] font-black font-mono">10</span>
-            </div>
+            <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2]" />
+            <span className="text-[9px] font-bold leading-none -mt-0.5">10</span>
           </button>
 
-          {/* Center Giant Play / Pause Circle Button (ONLY pause trigger) */}
+          {/* Play / Pause Toggle Button */}
           <button
-            onClick={handleCenterPlayPause}
-            className={`w-20 h-20 sm:w-22 sm:h-22 rounded-full bg-red-600/90 hover:bg-red-600 text-white flex items-center justify-center backdrop-blur-md border-2 border-white/40 shadow-2xl transition-all active:scale-95 cursor-pointer ${
-              tapFeedback === 'play' || tapFeedback === 'pause'
-                ? 'scale-115 ring-4 ring-red-400/50'
-                : 'hover:scale-105'
-            }`}
+            onClick={onPlayPause}
+            className="w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-white text-black flex items-center justify-center shadow-[0_4px_16px_rgba(0,0,0,0.45)] hover:scale-105 active:scale-95 transition-transform cursor-pointer"
             title={state.isPlaying ? 'Pause' : 'Play'}
             aria-label={state.isPlaying ? 'Pause' : 'Play'}
           >
             {state.isPlaying ? (
-              <Pause className="w-9 h-9 fill-current stroke-none" />
+              <Pause className="w-5 h-5 sm:w-6 sm:h-6 fill-black text-black stroke-none" />
             ) : (
-              <Play className="w-9 h-9 fill-current stroke-none ml-1" />
+              <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-black text-black stroke-none ml-0.5" />
             )}
           </button>
 
-          {/* Forward 10s Circle Button */}
+          {/* Next Button */}
           <button
-            onClick={handleCenterForward}
-            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-black/75 hover:bg-black/95 text-white flex items-center justify-center backdrop-blur-md border border-white/25 shadow-2xl transition-all active:scale-90 cursor-pointer ${
-              tapFeedback === 'forward' ? 'scale-125 bg-red-600/60 border-red-400' : 'hover:scale-105'
-            }`}
-            title="Forward 10 seconds (→)"
-            aria-label="Forward 10 seconds"
+            onClick={handleNextOrForward}
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer backdrop-blur-sm shadow-md"
+            title={onNextEpisode ? 'Next Movie' : 'Forward 10 seconds'}
+            aria-label="Next button"
           >
-            <div className="relative flex items-center justify-center">
-              <RotateCw className="w-7 h-7 stroke-[2.2]" />
-              <span className="absolute text-[10px] font-black font-mono">10</span>
-            </div>
+            <SkipForward className="w-4 h-4 sm:w-5 sm:h-5 fill-white stroke-none" />
           </button>
         </div>
       </div>
 
       {/* ========================================================
-          3. BOTTOM TIMELINE & ACTIONS BAR
-          Elevated with pb-14 sm:pb-16 and bottom margin to stay completely clear of bottom badges (Netlify badge) and device navigation bars
+          3. PROGRESS BAR & BOTTOM CONTROLS
+          - Progress Bar: Located beneath playback controls to track video duration
+          - Bottom Left: Current / Total Time
+          - Bottom Right Icons:
+            - Other Controls button (opens popup menu)
+            - Full Screen / Play toggle (rotates display to landscape)
          ======================================================== */}
       <div
-        className="pt-6 pb-14 sm:pb-16 px-4 sm:px-8 mb-2 sm:mb-4 bg-gradient-to-t from-black/95 via-black/85 to-transparent flex flex-col gap-2 z-30 pointer-events-auto"
+        className="px-3 sm:px-6 pb-2.5 sm:pb-4 flex flex-col gap-1.5 select-none z-30 pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
+        data-no-toggle="true"
       >
-        {/* Scrub Track with Glowing Red Handle */}
-        <div className="relative w-full flex items-center h-4 group/slider cursor-pointer">
+        {/* Progress Bar (Located beneath playback controls) */}
+        <div className="relative flex items-center h-4 cursor-pointer group/slider w-full">
           <input
             type="range"
             min={0}
@@ -354,155 +302,59 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               onSeek(parseFloat(e.target.value));
               resetHideTimer();
             }}
-            className="w-full accent-red-600 h-2 sm:h-2.5 cursor-pointer bg-zinc-700/80 rounded-lg appearance-none outline-none transition-all group-hover/slider:h-3"
+            className="w-full h-1 cursor-pointer bg-white/25 rounded-full appearance-none outline-none transition-all group-hover/slider:h-1.5 accent-red-600"
             style={{
-              background: `linear-gradient(to right, #dc2626 0%, #dc2626 ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%, rgba(255,255,255,0.2) 100%)`,
+              background: `linear-gradient(to right, #e50914 0%, #e50914 ${progressPercent}%, rgba(255,255,255,0.25) ${progressPercent}%, rgba(255,255,255,0.25) 100%)`,
             }}
           />
         </div>
 
-        {/* Timestamps: Current Time (left) and Total Time (right) */}
-        <div className="flex items-center justify-between text-xs font-mono font-bold text-zinc-200 -mt-0.5 select-none drop-shadow">
-          <span>{formatTime(state.currentTime)}</span>
-          <span>{formatTime(state.duration)}</span>
-        </div>
-
-        {/* Secondary Bottom Toolbar (Play/Pause, Mute, Next Episode, Add to My List, Like, Dislike, Share, Full Screen) */}
-        <div className="flex items-center justify-between pt-2.5 text-white">
-          {/* Left Actions */}
-          <div className="flex items-center gap-4 sm:gap-6">
-            {/* Bottom Play / Pause Button */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onPlayPause();
-                triggerFeedback(!state.isPlaying ? 'play' : 'pause');
-                resetHideTimer();
-              }}
-              className="px-2.5 py-1.5 text-white hover:text-red-400 bg-white/10 hover:bg-white/20 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
-              title={state.isPlaying ? 'Pause' : 'Play'}
-              aria-label={state.isPlaying ? 'Pause' : 'Play'}
-            >
-              {state.isPlaying ? (
-                <Pause className="w-4 h-4 fill-current" />
-              ) : (
-                <Play className="w-4 h-4 fill-current ml-0.5" />
-              )}
-              <span className="text-xs font-bold">{state.isPlaying ? 'Pause' : 'Play'}</span>
-            </button>
-
-            {/* Volume / Mute Button */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMute();
-                resetHideTimer();
-              }}
-              className="p-1.5 text-white hover:text-red-400 bg-white/10 hover:bg-white/20 rounded-lg transition-all cursor-pointer flex items-center"
-              title={state.isMuted ? 'Unmute' : 'Mute'}
-              aria-label={state.isMuted ? 'Unmute' : 'Mute'}
-            >
-              {state.isMuted ? (
-                <VolumeX className="w-4 h-4" />
-              ) : (
-                <Volume2 className="w-4 h-4" />
-              )}
-            </button>
-
-            {/* Next Episode */}
-            <button
-              onClick={() => {
-                onNextEpisode?.();
-                resetHideTimer();
-              }}
-              className="flex items-center gap-2 text-xs font-bold text-zinc-300 hover:text-white transition-colors cursor-pointer"
-            >
-              <SkipForward className="w-4 h-4 text-zinc-300" />
-              <span className="hidden xs:inline">Next Episode</span>
-            </button>
-
-            {/* In My List */}
-            <button
-              onClick={() => {
-                onToggleMyList?.();
-                resetHideTimer();
-              }}
-              className="flex items-center gap-2 text-xs font-bold text-zinc-300 hover:text-white transition-colors cursor-pointer"
-            >
-              {isInMyList ? (
-                <>
-                  <Check className="w-4 h-4 text-red-500 stroke-[2.5]" />
-                  <span className="text-white">In My List</span>
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4 stroke-[2.5]" />
-                  <span className="hidden xs:inline">Add to My List</span>
-                </>
-              )}
-            </button>
+        {/* Bottom Status & Right Action Icons */}
+        <div className="flex items-center justify-between">
+          {/* Bottom Left: Time tracking */}
+          <div className="flex items-center gap-1.5 text-xs font-mono text-white/90 drop-shadow-md">
+            <span className="font-semibold text-white">{formatTime(state.currentTime)}</span>
+            <span className="text-white/60">/</span>
+            <span className="text-white/70">{formatTime(state.duration)}</span>
           </div>
 
-          {/* Right Actions: Like, Dislike, Share, Full Screen */}
-          <div className="flex items-center gap-5 sm:gap-7">
-            {/* Like */}
+          {/* Bottom Right Icons */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Aspect Ratio / Fit Toggle */}
             <button
-              onClick={() => {
-                onLike?.();
-                resetHideTimer();
-              }}
-              className={`flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer ${
-                isLiked ? 'text-red-500' : 'text-zinc-300 hover:text-white'
+              onClick={onToggleCrop}
+              className={`p-1.5 rounded-full hover:bg-white/15 transition-colors cursor-pointer drop-shadow-md ${
+                isCropActive ? 'text-amber-400' : 'text-white/90 hover:text-white'
               }`}
+              title="Toggle Aspect Ratio (Fit / Cover)"
+              aria-label="Toggle Aspect Ratio"
             >
-              <ThumbsUp className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
-              <span className="hidden xs:inline">Like</span>
+              <Crop className="w-4 h-4 stroke-[2]" />
             </button>
 
-            {/* Dislike */}
+            {/* Other Controls Button (Opens popup menu) */}
             <button
-              onClick={() => {
-                onDislike?.();
-                resetHideTimer();
-              }}
-              className={`flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer ${
-                isDisliked ? 'text-red-500' : 'text-zinc-300 hover:text-white'
-              }`}
+              onClick={onOpenSettingsMenu}
+              className="p-1.5 rounded-full hover:bg-white/15 text-white/90 hover:text-white transition-colors cursor-pointer drop-shadow-md"
+              title="Other Controls (Popup Menu)"
+              aria-label="Other Controls"
             >
-              <ThumbsDown className={`w-4 h-4 ${isDisliked ? 'fill-current' : ''}`} />
-              <span className="hidden xs:inline">Dislike</span>
+              <Sliders className="w-4 h-4 stroke-[2]" />
             </button>
 
-            {/* Share */}
+            {/* Full Screen / Play Toggle (Rotates display to landscape) */}
             <button
-              onClick={() => {
-                onShare?.();
-                resetHideTimer();
-              }}
-              className="flex items-center gap-1.5 text-xs font-bold text-zinc-300 hover:text-white transition-colors cursor-pointer"
+              onClick={onToggleFullscreen}
+              className="p-1.5 rounded-full hover:bg-white/15 text-white/90 hover:text-white transition-colors cursor-pointer drop-shadow-md"
+              title={state.isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+              aria-label="Full Screen"
             >
-              <Share2 className="w-4 h-4" />
-              <span className="hidden xs:inline">Share</span>
+              {state.isFullscreen ? (
+                <Minimize className="w-4 h-4 stroke-[2.2]" />
+              ) : (
+                <Maximize className="w-4 h-4 stroke-[2.2]" />
+              )}
             </button>
-
-            {/* Full Screen */}
-            {onToggleFullscreen && (
-              <button
-                onClick={() => {
-                  onToggleFullscreen();
-                  resetHideTimer();
-                }}
-                className="flex items-center gap-1.5 text-xs font-bold text-zinc-300 hover:text-white transition-colors cursor-pointer bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded-lg border border-white/15"
-                title={state.isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
-              >
-                {state.isFullscreen ? (
-                  <Minimize className="w-4 h-4" />
-                ) : (
-                  <Maximize className="w-4 h-4" />
-                )}
-                <span className="hidden xs:inline">Full Screen</span>
-              </button>
-            )}
           </div>
         </div>
       </div>

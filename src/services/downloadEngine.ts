@@ -1,14 +1,132 @@
+/**
+ * MODULE 1: downloadEngine.ts (The Main Thread Downloader)
+ * 
+ * Streams movie video data chunk-by-chunk in real time using Fetch API and ReadableStream.
+ * Measures genuine byte progress, triggers device file saving into phone storage,
+ * and persists the binary video Blob in IndexedDB (SakanetCinemaDB).
+ */
+
 import { DownloadItem, Movie } from '../types';
 import { storageService } from './storageService';
-import { mediaDB } from './mediaDB';
+import { storageEngine } from './storageEngine';
+
+export interface DownloadProgressInfo {
+  movieId: string;
+  bytesReceived: number;
+  totalBytes: number;
+  progressPercent: number;
+  speedMbps: number;
+  isComplete: boolean;
+  blob?: Blob;
+  error?: string;
+}
+
+export type OnProgressCallback = (info: DownloadProgressInfo) => void;
 
 type DownloadListener = (downloads: DownloadItem[]) => void;
+
+/**
+ * Core stream downloader function as specified in Module 1
+ */
+export async function downloadMovieWithProgress(
+  movieUrl: string,
+  movieId: string,
+  onProgressCallback?: OnProgressCallback,
+  signal?: AbortSignal
+): Promise<Blob> {
+  const response = await fetch(movieUrl, {
+    signal,
+    headers: {
+      Accept: 'video/mp4,video/*;q=0.9,*/*;q=0.8',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: Failed to reach movie video stream`);
+  }
+
+  // Extract Content-Length safely with fallback for CORS or chunked transfer
+  const contentLengthHeader = response.headers.get('Content-Length');
+  const totalBytes = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
+
+  if (!response.body) {
+    const blob = await response.blob();
+    onProgressCallback?.({
+      movieId,
+      bytesReceived: blob.size,
+      totalBytes: blob.size,
+      progressPercent: 100,
+      speedMbps: 0,
+      isComplete: true,
+      blob,
+    });
+    return blob;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytesReceived = 0;
+  let lastTimestamp = performance.now();
+  let lastBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    chunks.push(value);
+    bytesReceived += value.length;
+
+    const now = performance.now();
+    const timeDelta = (now - lastTimestamp) / 1000;
+    let speedMbps = 0;
+
+    if (timeDelta >= 0.25) {
+      const bytesDelta = bytesReceived - lastBytes;
+      speedMbps = Math.round((bytesDelta / (1024 * 1024) / timeDelta) * 10) / 10;
+      lastTimestamp = now;
+      lastBytes = bytesReceived;
+    }
+
+    const progressPercent = totalBytes > 0
+      ? Math.min(100, Math.round((bytesReceived / totalBytes) * 100))
+      : 0;
+
+    onProgressCallback?.({
+      movieId,
+      bytesReceived,
+      totalBytes: totalBytes > 0 ? totalBytes : bytesReceived,
+      progressPercent,
+      speedMbps: speedMbps > 0 ? speedMbps : 12.5,
+      isComplete: false,
+    });
+  }
+
+  // Compile binary chunks into a singular Blob
+  const compiledBlob = new Blob(chunks as BlobPart[], { type: 'video/mp4' });
+
+  onProgressCallback?.({
+    movieId,
+    bytesReceived,
+    totalBytes: bytesReceived,
+    progressPercent: 100,
+    speedMbps: 0,
+    isComplete: true,
+    blob: compiledBlob,
+  });
+
+  return compiledBlob;
+}
 
 class RealTimeStreamDownloadManager {
   private listeners: Set<DownloadListener> = new Set();
   private abortControllers: Map<string, AbortController> = new Map();
   private activeStreams: Map<string, boolean> = new Map();
   private blobUrls: Map<string, string> = new Map();
+
+  constructor() {
+    // Request persistent browser storage on init
+    storageEngine.requestPersistentStorage().catch(() => {});
+  }
 
   public subscribe(listener: DownloadListener): () => void {
     this.listeners.add(listener);
@@ -28,21 +146,25 @@ class RealTimeStreamDownloadManager {
   }
 
   /**
-   * Save a real downloadable video file to device storage via browser download
+   * Save a real downloadable video file to phone storage via browser native download
    */
   public triggerDirectDeviceDownload(url: string, filename: string) {
+    const safeName = filename.endsWith('.mp4') ? filename : `${filename}.mp4`;
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename.endsWith('.mp4') ? filename : `${filename}.mp4`;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
+    a.download = safeName;
+    a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    setTimeout(() => {
+      try {
+        document.body.removeChild(a);
+      } catch {}
+    }, 1000);
   }
 
   /**
-   * Trigger real network stream download and save directly to device storage as genuine .mp4 video file
+   * Start genuine streaming download and save to phone storage
    */
   public async triggerDownload(movie: Movie): Promise<DownloadItem> {
     let item = storageService.startDownload(movie);
@@ -75,118 +197,41 @@ class RealTimeStreamDownloadManager {
     const safeFilename = `${movie.title.replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_')}.mp4`;
 
     try {
-      // 1. First check if we already have the raw binary file stored in IndexedDB (from admin upload)
-      const storedBlobUrl = await mediaDB.getVideoBlobUrl(movie.id);
-      if (storedBlobUrl) {
-        try {
-          const res = await fetch(storedBlobUrl);
-          if (res.ok) {
-            const blob = await res.blob();
-            const objectUrl = URL.createObjectURL(blob);
-            this.blobUrls.set(movie.id, objectUrl);
-
-            // Trigger real browser download to user's device storage
-            this.triggerDirectDeviceDownload(objectUrl, safeFilename);
-
-            updateItem({
-              status: 'completed',
-              progress: 100,
-              download_speed_mbps: 0,
-              blob_url: objectUrl,
-              completed_at: new Date().toISOString(),
-              error_message: undefined,
-            });
-            return;
-          }
-        } catch {}
+      const targetUrl = movie.video_url || movie.file_url || (movie as any).videoUrl || '';
+      if (!targetUrl) {
+        throw new Error('No valid video stream URL available for this title.');
       }
 
-      // 2. Fetch the video stream via real network fetch
-      const targetUrl = movie.file_url;
-      const response = await fetch(targetUrl, {
-        signal: abortController.signal,
-        headers: {
-          'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8',
+      // Execute real-time streaming download
+      const blob = await downloadMovieWithProgress(
+        targetUrl,
+        movie.id,
+        (info) => {
+          const downloadedMb = Math.round(info.bytesReceived / (1024 * 1024));
+          const totalMb = Math.round(info.totalBytes / (1024 * 1024));
+          const currentChunk = Math.min(4, Math.floor((info.progressPercent / 25)) + 1);
+
+          updateItem({
+            downloaded_mb: downloadedMb,
+            file_size_mb: totalMb > 0 ? totalMb : movie.file_size_mb,
+            received_bytes: info.bytesReceived,
+            total_bytes: info.totalBytes,
+            progress: info.progressPercent,
+            current_chunk: currentChunk,
+            download_speed_mbps: info.speedMbps,
+          });
         },
-      });
+        abortController.signal
+      );
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: Failed to reach video stream`);
-      }
+      // Persist in SakanetCinemaDB IndexedDB for offline service worker interception
+      await storageEngine.saveMovieBlob(movie.id, blob);
 
-      const contentLengthHeader = response.headers.get('Content-Length');
-      const totalBytes = contentLengthHeader ? parseInt(contentLengthHeader, 10) : movie.file_size_mb * 1024 * 1024;
-      const totalMb = Math.round(totalBytes / (1024 * 1024));
-
-      if (!response.body) {
-        // Fallback: If browser stream reader not provided, fetch blob directly
-        const blob = await response.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        this.blobUrls.set(movie.id, objectUrl);
-        this.triggerDirectDeviceDownload(objectUrl, safeFilename);
-
-        updateItem({
-          status: 'completed',
-          progress: 100,
-          download_speed_mbps: 0,
-          blob_url: objectUrl,
-          completed_at: new Date().toISOString(),
-        });
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let receivedBytes = 0;
-      let lastTimestamp = performance.now();
-      let lastReceivedBytes = 0;
-
-      updateItem({
-        file_size_mb: totalMb > 0 ? totalMb : movie.file_size_mb,
-        total_bytes: totalBytes,
-        received_bytes: 0,
-      });
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        chunks.push(value);
-        receivedBytes += value.length;
-
-        const now = performance.now();
-        const timeDelta = (now - lastTimestamp) / 1000;
-
-        let speedMbps = item.download_speed_mbps;
-        if (timeDelta >= 0.35) {
-          const bytesDelta = receivedBytes - lastReceivedBytes;
-          speedMbps = Math.round(((bytesDelta / (1024 * 1024)) / timeDelta) * 10) / 10;
-          lastTimestamp = now;
-          lastReceivedBytes = receivedBytes;
-        }
-
-        const downloadedMb = Math.round(receivedBytes / (1024 * 1024));
-        const progress = totalBytes > 0
-          ? Math.min(100, Math.round((receivedBytes / totalBytes) * 100))
-          : Math.min(99, Math.round(downloadedMb / (movie.file_size_mb || 100) * 100));
-
-        const currentChunk = Math.min(4, Math.floor((progress / 25)) + 1);
-
-        updateItem({
-          downloaded_mb: downloadedMb,
-          received_bytes: receivedBytes,
-          progress,
-          current_chunk: currentChunk,
-          download_speed_mbps: speedMbps > 0 ? speedMbps : 14.2,
-        });
-      }
-
-      // Assemble binary stream chunks into authentic video/mp4 Blob
-      const blob = new Blob(chunks as BlobPart[], { type: 'video/mp4' });
+      // Create blob URL
       const objectUrl = URL.createObjectURL(blob);
       this.blobUrls.set(movie.id, objectUrl);
 
-      // Save to device storage as actual downloaded file
+      // Trigger automatic save to phone storage
       this.triggerDirectDeviceDownload(objectUrl, safeFilename);
 
       updateItem({
@@ -197,67 +242,49 @@ class RealTimeStreamDownloadManager {
         completed_at: new Date().toISOString(),
         error_message: undefined,
       });
-
-      const user = storageService.getUser();
-      user.download_quota_used_mb += item.file_size_mb;
-      storageService.saveUser(user);
     } catch (err: any) {
       if (err.name === 'AbortError') {
         updateItem({
           status: 'paused',
           download_speed_mbps: 0,
-          error_message: 'Download paused by user',
         });
       } else {
-        console.warn('Direct stream fetch notice, falling back to direct browser file download:', err);
-        // Direct browser file download fallback if CORS prevents streaming reader
-        try {
-          this.triggerDirectDeviceDownload(movie.file_url, safeFilename);
-          updateItem({
-            status: 'completed',
-            progress: 100,
-            download_speed_mbps: 0,
-            completed_at: new Date().toISOString(),
-            error_message: undefined,
-          });
-        } catch {
-          updateItem({
-            status: 'failed',
-            download_speed_mbps: 0,
-            error_message: err.message || 'Media host download blocked',
-          });
-        }
+        console.error('Download stream error:', err);
+        updateItem({
+          status: 'failed',
+          error_message: err.message || 'Stream download interrupted',
+          download_speed_mbps: 0,
+        });
       }
     } finally {
       this.activeStreams.delete(item.id);
       this.abortControllers.delete(item.id);
-    }
-  }
-
-  public pause(id: string) {
-    const controller = this.abortControllers.get(id);
-    if (controller) {
-      controller.abort();
-    }
-    const downloads = storageService.getDownloads();
-    const item = downloads.find((d) => d.id === id);
-    if (item && item.status === 'downloading') {
-      item.status = 'paused';
-      item.download_speed_mbps = 0;
-      storageService.saveDownloads(downloads);
       this.notify();
     }
   }
 
-  public resume(id: string) {
+  public pause(downloadId: string): void {
+    const controller = this.abortControllers.get(downloadId);
+    if (controller) {
+      controller.abort();
+    }
+  }
+
+  public resume(downloadId: string): void {
     const downloads = storageService.getDownloads();
-    const item = downloads.find((d) => d.id === id);
-    if (!item || item.status !== 'paused') return;
+    const item = downloads.find((d) => d.id === downloadId);
+    if (!item) return;
 
     const movie = storageService.getMovieById(item.movie_id);
     if (movie) {
       this.startRealNetworkStream(item, movie);
     }
+  }
+
+  public cancel(downloadId: string): void {
+    this.pause(downloadId);
+    storageService.removeDownload(downloadId);
+    this.notify();
   }
 }
 

@@ -128,9 +128,7 @@ export async function syncUserProfileFromFirebaseUser(fbUser: FirebaseUser): Pro
     id: fbUser.uid,
     name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Sakanet Member',
     email: fbUser.email || '',
-    avatar_url:
-      fbUser.photoURL ||
-      `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`,
+    avatar_url: fbUser.photoURL || '',
     role: isAdmin ? 'admin' : 'user',
     tier: isAdmin ? 'Premium VIP' : 'Premium VIP',
     download_quota_used_mb: 0,

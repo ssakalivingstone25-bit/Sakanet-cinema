@@ -3,366 +3,422 @@ import {
   Moon,
   Sun,
   Monitor,
-  Shield,
-  Bell,
-  HardDrive,
-  Download,
-  Wifi,
-  Trash2,
-  Lock,
-  LogOut,
-  User,
   Check,
-  ChevronRight,
+  Palette,
+  Eye,
+  Sliders,
   Sparkles,
-  Info,
+  LayoutGrid,
+  Maximize2,
+  Film,
+  Play,
+  Star,
 } from 'lucide-react';
 import { UserProfile, DownloadItem } from '../types';
-import { signOutUser } from '../services/firebase';
-import { storageService } from '../services/storageService';
 
 interface SettingsViewProps {
-  user: UserProfile;
-  downloads: DownloadItem[];
-  isOfflineMode: boolean;
-  onToggleOfflineMode: (offline: boolean) => void;
-  onOpenAuth: () => void;
+  user?: UserProfile;
+  downloads?: DownloadItem[];
+  isOfflineMode?: boolean;
+  onToggleOfflineMode?: (offline: boolean) => void;
+  onOpenAuth?: () => void;
   onUserUpdated?: () => void;
 }
 
-export type ThemeOption = 'dark' | 'light' | 'oled' | 'system';
+export type ThemeOption = 'dark' | 'light' | 'system';
 
-export const SettingsView: React.FC<SettingsViewProps> = ({
-  user,
-  downloads,
-  isOfflineMode,
-  onToggleOfflineMode,
-  onOpenAuth,
-  onUserUpdated,
-}) => {
+export const SettingsView: React.FC<SettingsViewProps> = () => {
   // Theme state
   const [theme, setTheme] = useState<ThemeOption>(() => {
     return (localStorage.getItem('sakanet_theme') as ThemeOption) || 'dark';
   });
 
-  // Streaming quality preference
-  const [streamQuality, setStreamQuality] = useState<string>(() => {
-    return localStorage.getItem('sakanet_stream_quality') || 'auto';
+  // Display density preference
+  const [gridDensity, setGridDensity] = useState<'spacious' | 'compact'>(() => {
+    return (localStorage.getItem('sakanet_grid_density') as 'spacious' | 'compact') || 'spacious';
   });
 
-  // Autoplay toggle
-  const [autoPlayNext, setAutoPlayNext] = useState<boolean>(() => {
-    return localStorage.getItem('sakanet_autoplay') !== 'false';
+  // High contrast mode
+  const [highContrast, setHighContrast] = useState<boolean>(() => {
+    return localStorage.getItem('sakanet_high_contrast') === 'true';
   });
 
-  // Storage calculation
-  const totalDownloadedMB = downloads.reduce(
-    (acc, item) => acc + (item.status === 'completed' ? item.file_size_mb : 0),
-    0
-  );
-
-  const [confirmClearCache, setConfirmClearCache] = useState(false);
-  const [savedToast, setSavedToast] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
-    setSavedToast(msg);
-    setTimeout(() => setSavedToast(null), 3000);
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2400);
   };
 
   const handleThemeChange = (newTheme: ThemeOption) => {
     setTheme(newTheme);
     localStorage.setItem('sakanet_theme', newTheme);
 
-    // Apply theme to document root
     const root = document.documentElement;
     root.classList.remove('dark', 'light', 'oled');
 
     if (newTheme === 'dark') {
       root.classList.add('dark');
+      root.style.colorScheme = 'dark';
     } else if (newTheme === 'light') {
       root.classList.add('light');
-    } else if (newTheme === 'oled') {
-      root.classList.add('oled');
+      root.style.colorScheme = 'light';
     } else {
-      // System
       const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       root.classList.add(systemDark ? 'dark' : 'light');
+      root.style.colorScheme = systemDark ? 'dark' : 'light';
     }
-    showToast(`Theme updated to ${newTheme.toUpperCase()}`);
+
+    const label =
+      newTheme === 'dark'
+        ? 'Cinema Dark (Red & Black)'
+        : newTheme === 'light'
+        ? 'Clear White & Red'
+        : 'System Theme';
+    showToast(`Appearance updated to ${label}`);
   };
 
-  const handleQualityChange = (quality: string) => {
-    setStreamQuality(quality);
-    localStorage.setItem('sakanet_stream_quality', quality);
-    showToast(`Streaming quality set to ${quality}`);
+  const handleDensityChange = (density: 'spacious' | 'compact') => {
+    setGridDensity(density);
+    localStorage.setItem('sakanet_grid_density', density);
+    showToast(`Catalog layout set to ${density === 'spacious' ? 'Cinematic Spacious' : 'High-Density Compact'}`);
   };
 
-  const handleAutoPlayToggle = () => {
-    const nextVal = !autoPlayNext;
-    setAutoPlayNext(nextVal);
-    localStorage.setItem('sakanet_autoplay', nextVal ? 'true' : 'false');
-    showToast(nextVal ? 'Autoplay enabled' : 'Autoplay disabled');
-  };
-
-  const handleClearCache = () => {
-    storageService.clearAllDownloads();
-    showToast('Offline media cache cleared');
-    setConfirmClearCache(false);
-    onUserUpdated?.();
-  };
-
-  const handleSignOut = async () => {
-    try {
-      await signOutUser();
-      storageService.clearUser();
-      window.location.reload();
-    } catch (e) {
-      console.error('Sign out error:', e);
+  const handleContrastToggle = () => {
+    const next = !highContrast;
+    setHighContrast(next);
+    localStorage.setItem('sakanet_high_contrast', next ? 'true' : 'false');
+    const root = document.documentElement;
+    if (next) {
+      root.classList.add('high-contrast');
+    } else {
+      root.classList.remove('high-contrast');
     }
+    showToast(next ? 'High Contrast typography enabled' : 'Standard contrast restored');
   };
+
+  // Listen for system color scheme changes if system theme is selected
+  useEffect(() => {
+    if (theme !== 'system') return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      const root = document.documentElement;
+      root.classList.remove('dark', 'light');
+      root.classList.add(e.matches ? 'dark' : 'light');
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [theme]);
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-6 text-white font-sans select-none pb-24">
-      {/* Toast Notification */}
-      {savedToast && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white text-xs font-semibold px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 select-none pb-28">
+      {/* Toast Feedback */}
+      {toastMessage && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-[#E50914] text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-3">
           <Check className="w-3.5 h-3.5" />
-          <span>{savedToast}</span>
+          <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-          Settings
+      <div className="mb-8">
+        <div className="inline-flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-[#E50914] mb-1.5">
+          <Palette className="w-4 h-4" />
+          <span>Interface Configuration</span>
+        </div>
+        <h1 className="text-3xl sm:text-4xl font-extrabold font-display tracking-tight text-white dark:text-white light:text-slate-900">
+          Appearance &amp; Theme
         </h1>
-        <p className="text-xs text-zinc-400 mt-1">
-          Customize your playback, theme, storage, and account preferences
+        <p className="text-sm text-zinc-400 mt-1 max-w-xl leading-relaxed">
+          Choose a tailored cinema color palette and layout density. All settings apply instantly across your device.
         </p>
       </div>
 
-      {/* User Profile Card */}
-      <div className="bg-[#141418] border border-white/10 rounded-2xl p-4 sm:p-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
-        <div className="flex items-center gap-3.5">
-          <div className="relative w-12 h-12 rounded-full border-2 border-red-500 overflow-hidden bg-zinc-800 flex items-center justify-center shrink-0">
-            {user.avatar_url ? (
-              <img
-                src={user.avatar_url}
-                alt={user.name}
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <User className="w-6 h-6 text-zinc-400" />
-            )}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-base text-white">{user.name}</h3>
-              {user.role === 'admin' && (
-                <span className="bg-red-600/30 border border-red-500/40 text-red-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                  Admin
-                </span>
-              )}
+      <div className="space-y-6">
+        {/* ========================================================
+            THEME SELECTION (Red & Black Dark vs Clear White & Red Light)
+           ======================================================== */}
+        <section className="bg-[#121319] border border-white/10 rounded-2xl p-5 sm:p-7 shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-white tracking-tight">Theme Colorway</h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Select your preferred visual style and color balance.
+              </p>
             </div>
-            <p className="text-xs text-zinc-400 truncate max-w-[220px] sm:max-w-none">
-              {user.email || 'Guest Visitor'}
-            </p>
-          </div>
-        </div>
-
-        <button
-          onClick={handleSignOut}
-          className="flex items-center gap-2 text-xs font-semibold px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-white/10 transition-all cursor-pointer"
-        >
-          <LogOut className="w-3.5 h-3.5 text-red-400" />
-          <span>Switch Account / Sign Out</span>
-        </button>
-      </div>
-
-      {/* 1. APPEARANCE & THEME */}
-      <div className="bg-[#141418] border border-white/10 rounded-2xl p-5 mb-5 shadow-xl space-y-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-red-500 uppercase tracking-wider">
-          <Sparkles className="w-4 h-4" />
-          <span>Appearance & Theme</span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {/* Dark Mode */}
-          <button
-            onClick={() => handleThemeChange('dark')}
-            className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all cursor-pointer ${
-              theme === 'dark'
-                ? 'bg-red-600/20 border-red-500 text-white shadow-lg shadow-red-600/20 ring-1 ring-red-500'
-                : 'bg-zinc-900/60 border-white/10 text-zinc-400 hover:border-white/20 hover:text-white'
-            }`}
-          >
-            <Moon className="w-5 h-5 mb-1.5 text-red-500" />
-            <span className="text-xs font-semibold">Cinema Dark</span>
-            <span className="text-[10px] text-zinc-400">Midnight Crimson</span>
-          </button>
-
-          {/* Light Mode */}
-          <button
-            onClick={() => handleThemeChange('light')}
-            className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all cursor-pointer ${
-              theme === 'light'
-                ? 'bg-amber-500/20 border-amber-500 text-white shadow-lg shadow-amber-500/20 ring-1 ring-amber-500'
-                : 'bg-zinc-900/60 border-white/10 text-zinc-400 hover:border-white/20 hover:text-white'
-            }`}
-          >
-            <Sun className="w-5 h-5 mb-1.5 text-amber-400" />
-            <span className="text-xs font-semibold">Studio Light</span>
-            <span className="text-[10px] text-zinc-400">Crisp High-Contrast</span>
-          </button>
-
-          {/* OLED Black */}
-          <button
-            onClick={() => handleThemeChange('oled')}
-            className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all cursor-pointer ${
-              theme === 'oled'
-                ? 'bg-red-600/20 border-red-500 text-white shadow-lg shadow-red-600/20 ring-1 ring-red-500'
-                : 'bg-zinc-900/60 border-white/10 text-zinc-400 hover:border-white/20 hover:text-white'
-            }`}
-          >
-            <Sparkles className="w-5 h-5 mb-1.5 text-purple-400" />
-            <span className="text-xs font-semibold">OLED Black</span>
-            <span className="text-[10px] text-zinc-400">Pitch Black AMOLED</span>
-          </button>
-
-          {/* System Default */}
-          <button
-            onClick={() => handleThemeChange('system')}
-            className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all cursor-pointer ${
-              theme === 'system'
-                ? 'bg-blue-600/20 border-blue-500 text-white shadow-lg shadow-blue-500/20 ring-1 ring-blue-500'
-                : 'bg-zinc-900/60 border-white/10 text-zinc-400 hover:border-white/20 hover:text-white'
-            }`}
-          >
-            <Monitor className="w-5 h-5 mb-1.5 text-blue-400" />
-            <span className="text-xs font-semibold">Auto System</span>
-            <span className="text-[10px] text-zinc-400">Sync with Device</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 2. PLAYBACK & STREAMING PREFERENCES */}
-      <div className="bg-[#141418] border border-white/10 rounded-2xl p-5 mb-5 shadow-xl space-y-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-red-500 uppercase tracking-wider">
-          <Wifi className="w-4 h-4" />
-          <span>Playback & Streaming</span>
-        </div>
-
-        {/* Streaming Resolution */}
-        <div className="flex items-center justify-between py-2 border-b border-white/5">
-          <div>
-            <div className="text-sm font-semibold text-white">Default Video Quality</div>
-            <div className="text-xs text-zinc-400">Adaptive bitrate will adjust based on connection</div>
-          </div>
-          <select
-            value={streamQuality}
-            onChange={(e) => handleQualityChange(e.target.value)}
-            className="bg-zinc-900 border border-white/15 text-white text-xs font-semibold rounded-lg px-3 py-1.5 focus:outline-none focus:border-red-500 cursor-pointer"
-          >
-            <option value="auto">Auto (Adaptive)</option>
-            <option value="4k">4K Ultra HD (High Data)</option>
-            <option value="1080p">1080p Full HD</option>
-            <option value="720p">720p HD (Data Saver)</option>
-          </select>
-        </div>
-
-        {/* Autoplay Next */}
-        <div className="flex items-center justify-between py-2 border-b border-white/5">
-          <div>
-            <div className="text-sm font-semibold text-white">Autoplay Next Episode / Movie</div>
-            <div className="text-xs text-zinc-400">Automatically start the next title upon finish</div>
-          </div>
-          <button
-            onClick={handleAutoPlayToggle}
-            className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-              autoPlayNext ? 'bg-red-600' : 'bg-zinc-800'
-            }`}
-          >
-            <div
-              className={`w-5 h-5 rounded-full bg-white transition-transform transform absolute top-0.5 left-0.5 ${
-                autoPlayNext ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
-        </div>
-      </div>
-
-      {/* 3. DOWNLOADS & STORAGE MANAGEMENT */}
-      <div className="bg-[#141418] border border-white/10 rounded-2xl p-5 mb-5 shadow-xl space-y-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-red-500 uppercase tracking-wider">
-          <HardDrive className="w-4 h-4" />
-          <span>Offline Downloads & Cache</span>
-        </div>
-
-        <div className="flex items-center justify-between py-1">
-          <div>
-            <div className="text-sm font-semibold text-white">Downloaded Movies Size</div>
-            <div className="text-xs text-zinc-400">
-              {downloads.filter((d) => d.status === 'completed').length} titles stored locally
-            </div>
-          </div>
-          <span className="font-mono text-xs font-bold text-amber-400">
-            {totalDownloadedMB.toFixed(1)} MB
-          </span>
-        </div>
-
-        {/* Clear Media Storage Button */}
-        <div className="pt-2">
-          {confirmClearCache ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleClearCache}
-                className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all cursor-pointer"
-              >
-                Yes, Clear All Offline Media
-              </button>
-              <button
-                onClick={() => setConfirmClearCache(false)}
-                className="bg-zinc-800 text-zinc-300 text-xs font-semibold px-3 py-2 rounded-lg hover:text-white"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setConfirmClearCache(true)}
-              className="flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-red-400 py-1 transition-colors cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear Offline Downloads</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 4. SECURITY & SYSTEM INFO */}
-      <div className="bg-[#141418] border border-white/10 rounded-2xl p-5 shadow-xl space-y-3">
-        <div className="flex items-center gap-2 text-xs font-bold text-red-500 uppercase tracking-wider">
-          <Shield className="w-4 h-4" />
-          <span>System Information</span>
-        </div>
-
-        <div className="text-xs text-zinc-400 space-y-2">
-          <div className="flex justify-between border-b border-white/5 pb-1.5">
-            <span>App Version</span>
-            <span className="font-mono text-zinc-300">Sakanet Cinema v2.4 (Android Build)</span>
-          </div>
-          <div className="flex justify-between border-b border-white/5 pb-1.5">
-            <span>Admin Control Authority</span>
-            <span className="font-mono text-zinc-300">ssakalivingstone25@gmail.com</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Cloud Database Sync</span>
-            <span className="text-emerald-400 font-semibold flex items-center gap-1">
-              <Check className="w-3 h-3" /> Connected (Cloud Firestore)
+            <span className="text-[11px] font-mono px-2.5 py-1 rounded bg-white/5 border border-white/10 text-zinc-300">
+              Active: {theme === 'dark' ? 'Cinema Red & Black' : theme === 'light' ? 'Clear White & Red' : 'Device System'}
             </span>
           </div>
-        </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            {/* 1. Cinema Dark (Red & Black) */}
+            <button
+              onClick={() => handleThemeChange('dark')}
+              className={`text-left p-4 rounded-xl border transition-all cursor-pointer relative flex flex-col justify-between group ${
+                theme === 'dark'
+                  ? 'border-[#E50914] bg-gradient-to-b from-[#181922] to-[#0f1015] shadow-lg shadow-red-950/40'
+                  : 'border-white/10 bg-[#09090b]/80 hover:border-white/25 hover:bg-[#14151e]'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-black border border-white/15 flex items-center justify-center text-[#E50914]">
+                    <Moon className="w-4 h-4" />
+                  </div>
+                  {theme === 'dark' && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#E50914] bg-red-600/10 px-2 py-0.5 rounded-full border border-red-500/30">
+                      <Check className="w-3 h-3" /> Active
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">
+                  Cinema Dark
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                  Deep obsidian black canvas with authentic cinema red accents. Optimized for low-light cinema viewing.
+                </p>
+              </div>
+
+              {/* Swatch preview */}
+              <div className="mt-4 pt-3 border-t border-white/10 flex items-center gap-2">
+                <span className="text-[10px] text-zinc-500 font-mono">Palette</span>
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <span className="w-4 h-4 rounded-full bg-[#09090b] border border-white/20" title="Obsidian Black" />
+                  <span className="w-4 h-4 rounded-full bg-[#181922] border border-white/20" title="Charcoal Surface" />
+                  <span className="w-4 h-4 rounded-full bg-[#E50914]" title="Cinema Red" />
+                  <span className="w-4 h-4 rounded-full bg-white" title="White Text" />
+                </div>
+              </div>
+            </button>
+
+            {/* 2. Clear White & Red (Light Theme) */}
+            <button
+              onClick={() => handleThemeChange('light')}
+              className={`text-left p-4 rounded-xl border transition-all cursor-pointer relative flex flex-col justify-between group ${
+                theme === 'light'
+                  ? 'border-[#E50914] bg-gradient-to-b from-[#181922] to-[#0f1015] shadow-lg shadow-red-950/40'
+                  : 'border-white/10 bg-[#09090b]/80 hover:border-white/25 hover:bg-[#14151e]'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-[#E50914]">
+                    <Sun className="w-4 h-4" />
+                  </div>
+                  {theme === 'light' && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#E50914] bg-red-600/10 px-2 py-0.5 rounded-full border border-red-500/30">
+                      <Check className="w-3 h-3" /> Active
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">
+                  Clear White &amp; Red
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                  Clean, crisp white canvas with scarlet red accents and deep charcoal typography. High-clarity daylight reading.
+                </p>
+              </div>
+
+              {/* Swatch preview */}
+              <div className="mt-4 pt-3 border-t border-white/10 flex items-center gap-2">
+                <span className="text-[10px] text-zinc-500 font-mono">Palette</span>
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <span className="w-4 h-4 rounded-full bg-[#FFFFFF] border border-slate-300" title="Pure White" />
+                  <span className="w-4 h-4 rounded-full bg-[#F1F5F9] border border-slate-300" title="Soft Slate" />
+                  <span className="w-4 h-4 rounded-full bg-[#E50914]" title="Cinema Red" />
+                  <span className="w-4 h-4 rounded-full bg-[#0F172A]" title="Deep Charcoal" />
+                </div>
+              </div>
+            </button>
+
+            {/* 3. Match Device System */}
+            <button
+              onClick={() => handleThemeChange('system')}
+              className={`text-left p-4 rounded-xl border transition-all cursor-pointer relative flex flex-col justify-between group ${
+                theme === 'system'
+                  ? 'border-[#E50914] bg-gradient-to-b from-[#181922] to-[#0f1015] shadow-lg shadow-red-950/40'
+                  : 'border-white/10 bg-[#09090b]/80 hover:border-white/25 hover:bg-[#14151e]'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-zinc-800 border border-white/15 flex items-center justify-center text-zinc-200">
+                    <Monitor className="w-4 h-4" />
+                  </div>
+                  {theme === 'system' && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#E50914] bg-red-600/10 px-2 py-0.5 rounded-full border border-red-500/30">
+                      <Check className="w-3 h-3" /> Active
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">
+                  Match Device System
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                  Automatically syncs with your operating system settings. Switches to Red &amp; Black at night and White &amp; Red by day.
+                </p>
+              </div>
+
+              {/* Swatch preview */}
+              <div className="mt-4 pt-3 border-t border-white/10 flex items-center gap-2">
+                <span className="text-[10px] text-zinc-500 font-mono">Dynamic</span>
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <span className="w-4 h-4 rounded-full bg-gradient-to-r from-[#09090b] to-[#FFFFFF] border border-white/30" />
+                  <span className="w-4 h-4 rounded-full bg-[#E50914]" />
+                </div>
+              </div>
+            </button>
+          </div>
+        </section>
+
+        {/* ========================================================
+            LAYOUT DENSITY & TYPOGRAPHY PREFERENCES
+           ======================================================== */}
+        <section className="bg-[#121319] border border-white/10 rounded-2xl p-5 sm:p-7 shadow-xl space-y-5">
+          <div>
+            <h2 className="text-base font-bold text-white tracking-tight">Layout &amp; Typography</h2>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Customize poster spacing and contrast for optimal browsing comfort.
+            </p>
+          </div>
+
+          <div className="space-y-4 divide-y divide-white/5">
+            {/* Grid Layout Density */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+              <div>
+                <div className="text-sm font-semibold text-white flex items-center gap-2">
+                  <LayoutGrid className="w-4 h-4 text-[#E50914]" />
+                  <span>Poster Catalog Density</span>
+                </div>
+                <div className="text-xs text-zinc-400 mt-0.5">
+                  Adjust thumbnail size and whitespace between movie cards in the catalog.
+                </div>
+              </div>
+
+              <div className="inline-flex bg-zinc-950 p-1 rounded-xl border border-white/10 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => handleDensityChange('spacious')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                    gridDensity === 'spacious'
+                      ? 'bg-[#E50914] text-white shadow'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  Cinematic Spacious
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDensityChange('compact')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                    gridDensity === 'compact'
+                      ? 'bg-[#E50914] text-white shadow'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  High-Density Compact
+                </button>
+              </div>
+            </div>
+
+            {/* High Contrast Mode */}
+            <div className="flex items-center justify-between gap-3 pt-4">
+              <div>
+                <div className="text-sm font-semibold text-white flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-[#E50914]" />
+                  <span>Enhanced Typographic Contrast</span>
+                </div>
+                <div className="text-xs text-zinc-400 mt-0.5">
+                  Increases contrast of secondary movie metadata, genres, and release years for maximum legibility.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleContrastToggle}
+                className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
+                  highContrast ? 'bg-[#E50914]' : 'bg-zinc-800'
+                }`}
+                aria-label="Toggle High Contrast"
+              >
+                <div
+                  className={`w-5 h-5 rounded-full bg-white transition-transform transform absolute top-0.5 left-0.5 ${
+                    highContrast ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ========================================================
+            LIVE PALETTE SHOWCASE (Humanistic Preview)
+           ======================================================== */}
+        <section className="bg-[#121319] border border-white/10 rounded-2xl p-5 sm:p-7 shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#E50914]" />
+                <span>Live Interface Preview</span>
+              </h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Real-time sample of headers, metadata tags, and action buttons in your active palette.
+              </p>
+            </div>
+          </div>
+
+          <div
+            className={`p-5 rounded-xl border transition-all ${
+              theme === 'light'
+                ? 'bg-[#FFFFFF] border-slate-200 text-[#0F172A]'
+                : 'bg-[#09090b] border-white/15 text-white'
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-[#E50914] uppercase tracking-wider">
+                    Sakanet Cinema Edition
+                  </span>
+                  <span className="text-zinc-500">·</span>
+                  <span className={`text-xs ${theme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}>
+                    4K Ultra HD
+                  </span>
+                </div>
+                <h4 className={`text-lg font-bold font-display ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>
+                  Cinema Experience Showcase
+                </h4>
+                <p className={`text-xs max-w-md ${theme === 'light' ? 'text-slate-600' : 'text-zinc-400'}`}>
+                  Handcrafted layout paired with pure cinema red accents and typographic hierarchy designed for effortless viewing.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 bg-[#E50914] hover:bg-[#d60b23] text-white text-xs font-bold px-4 py-2 rounded-lg shadow-md transition-transform active:scale-95"
+                >
+                  <Play className="w-3.5 h-3.5 fill-white" />
+                  <span>Watch Trailer</span>
+                </button>
+                <div
+                  className={`px-3 py-2 rounded-lg border text-xs font-semibold flex items-center gap-1 ${
+                    theme === 'light'
+                      ? 'bg-slate-100 border-slate-300 text-slate-800'
+                      : 'bg-white/5 border-white/10 text-white'
+                  }`}
+                >
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  <span>5.0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

@@ -47,7 +47,7 @@ export const EnhancedMovieDetailsModal: React.FC<EnhancedMovieDetailsModalProps>
           {/* Movie Poster */}
           <div className="w-full sm:w-40 shrink-0">
             <img
-              src={movie.thumbnail_url}
+              src={movie.poster_url || movie.thumbnail_url}
               alt={movie.title}
               referrerPolicy="no-referrer"
               className="w-full rounded-lg object-cover shadow-lg"

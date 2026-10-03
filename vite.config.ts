@@ -94,12 +94,11 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': import.meta.dirname || path.resolve('.'),
       },
     },
     build: {
       sourcemap: false,
-      minify: 'esbuild' as const,
       cssMinify: true,
       target: 'esnext',
       chunkSizeWarningLimit: 1200,
@@ -113,13 +112,6 @@ export default defineConfig(() => {
           },
         },
       },
-    },
-    esbuild: {
-      drop: ['console', 'debugger'] as ('console' | 'debugger')[],
-      legalComments: 'none' as const,
-      minifyIdentifiers: true,
-      minifySyntax: true,
-      minifyWhitespace: true,
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

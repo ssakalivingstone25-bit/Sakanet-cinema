@@ -9,6 +9,8 @@ interface VideoPlayerModalProps {
   initialTime?: number;
   isOfflinePlayback?: boolean;
   onProgressUpdated?: () => void;
+  allMovies?: Movie[];
+  onSelectMovie?: (m: Movie, startTime?: number) => void;
 }
 
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = (props) => {

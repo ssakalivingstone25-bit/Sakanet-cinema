@@ -30,7 +30,7 @@ export const EnhancedMovieGrid: React.FC<EnhancedMovieGridProps> = ({
     return (
       <div className="col-span-full text-center py-16">
         <p className="text-zinc-400 text-sm">
-          No movies found. Try adjusting your filters.
+          No movies available. Add a video URL to get started.
         </p>
       </div>
     );
@@ -59,7 +59,7 @@ export const EnhancedMovieGrid: React.FC<EnhancedMovieGridProps> = ({
               onClick={() => onSelectMovie(movie)}
             >
               <img
-                src={movie.thumbnail_url}
+                src={movie.poster_url || movie.thumbnail_url}
                 alt={movie.title}
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

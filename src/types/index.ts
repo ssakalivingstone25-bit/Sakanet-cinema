@@ -20,7 +20,9 @@ export interface Movie {
   duration_minutes: number;
   rating: number; // e.g. 4.8
   review_count: number;
-  file_url: string; // streaming source
+  video_url: string; // Lightweight string URL for video streaming
+  poster_url: string; // Lightweight string URL for poster image
+  file_url: string; // streaming source alias
   videoUrl?: string; // streamable URL alias
   filename?: string; // disk storage filename
   thumbnail_url: string; // poster portrait 2:3
@@ -85,6 +87,31 @@ export interface DownloadItem {
   error_message?: string;
 }
 
+export interface WatchHistoryItem {
+  movieId: string;
+  movieTitle: string;
+  genre: string;
+  vjName?: string;
+  currentTimeSec: number;
+  durationSec: number;
+  progressPercent: number;
+  completed: boolean;
+  watchedAt: string;
+}
+
+export interface RecommendationReason {
+  type: 'genre_match' | 'watch_history' | 'vj_favorite' | 'top_rated' | 'trending';
+  label: string;
+  highlight?: string;
+}
+
+export interface RecommendedMovie {
+  movie: Movie;
+  score: number;
+  matchPercentage: number;
+  reason: RecommendationReason;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -95,6 +122,8 @@ export interface UserProfile {
   download_quota_used_mb: number;
   download_quota_limit_mb: number;
   watchlist: string[]; // movie IDs
+  genrePreferences?: string[]; // Preferred genres
+  watchHistory?: WatchHistoryItem[]; // Detailed watch records
 }
 
 export interface WatchProgress {

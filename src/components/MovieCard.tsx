@@ -36,7 +36,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
       <div className="relative aspect-[3/4] w-full rounded-md overflow-hidden bg-[#18181b] border border-white/5 shadow-md group-hover:shadow-2xl group-hover:shadow-red-950/40 group-hover:border-red-600/40 transition-all duration-300">
         {!imgError ? (
           <img
-            src={movie.thumbnail_url}
+            src={movie.poster_url || movie.thumbnail_url}
             alt={movie.title}
             referrerPolicy="no-referrer"
             onError={() => setImgError(true)}

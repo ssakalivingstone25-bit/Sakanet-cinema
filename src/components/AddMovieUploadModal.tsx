@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import { Movie, VJ, DownloadPermission } from '../types';
 import { storageService } from '../services/storageService';
-import { mediaDB } from '../services/mediaDB';
 import { apiService } from '../services/apiService';
 import { saveMovieToFirestore } from '../services/firebase';
 
@@ -79,20 +78,17 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
   const [isTrending, setIsTrending] = useState<boolean>(true);
   const [isRecentlyAdded, setIsRecentlyAdded] = useState<boolean>(true);
 
-  // Section 2: Media Files (Device Image Uploads - NO URLs)
-  const [posterDataUrl, setPosterDataUrl] = useState<string>('');
-  const [backdropDataUrl, setBackdropDataUrl] = useState<string>('');
+  // Section 2: Media URLs (Lightweight string URLs)
+  const [posterUrl, setPosterUrl] = useState<string>('');
+  const [backdropUrl, setBackdropUrl] = useState<string>('');
   const [logoDataUrl, setLogoDataUrl] = useState<string>('');
   const [accentColor, setAccentColor] = useState<string>('#F20D28');
 
-  // Section 3: Video File Upload from device
-  const [videoFile, setVideoFile] = useState<File | null>(null);
+  // Section 3: Video Stream URL
   const [videoUrl, setVideoUrl] = useState<string>('');
-  const [fileSizeMb, setFileSizeMb] = useState<number>(0);
+  const [fileSizeMb, setFileSizeMb] = useState<number>(850);
   const [videoResolution, setVideoResolution] = useState<string>('1920x1080');
   const [videoFormat, setVideoFormat] = useState<string>('MP4');
-  const [isExtractingVideo, setIsExtractingVideo] = useState<boolean>(false);
-  const [extractedFrames, setExtractedFrames] = useState<string[]>([]);
 
   // Section 4: VJ Assignment
   const [vjsList, setVjsList] = useState<VJ[]>([]);
@@ -115,10 +111,7 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
   const [director, setDirector] = useState<string>('Livingstone Saka');
 
   // Hidden File Input Refs
-  const posterInputRef = useRef<HTMLInputElement>(null);
-  const backdropInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
   const newVjAvatarInputRef = useRef<HTMLInputElement>(null);
   const selectedVjAvatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -148,11 +141,11 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
       setIsFeatured(!!editingMovie.is_featured);
       setIsTrending(editingMovie.is_trending ?? true);
       setIsRecentlyAdded(editingMovie.is_recently_added ?? true);
-      setPosterDataUrl(editingMovie.thumbnail_url || '');
-      setBackdropDataUrl(editingMovie.banner_url || '');
+      setPosterUrl(editingMovie.poster_url || editingMovie.thumbnail_url || '');
+      setBackdropUrl(editingMovie.banner_url || '');
       setAccentColor(editingMovie.accent_color || '#F20D28');
-      setVideoUrl(editingMovie.file_url || '');
-      setFileSizeMb(editingMovie.file_size_mb || 0);
+      setVideoUrl(editingMovie.video_url || editingMovie.file_url || '');
+      setFileSizeMb(editingMovie.file_size_mb || 850);
       setSelectedVjName(editingMovie.vj_name || 'VJ Junior');
       setSelectedVjAvatarUrl(editingMovie.vj_avatar_url || '');
       setVjBio(editingMovie.vj_bio || '');
@@ -176,14 +169,12 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
       setIsFeatured(true);
       setIsTrending(true);
       setIsRecentlyAdded(true);
-      setPosterDataUrl('');
-      setBackdropDataUrl('');
+      setPosterUrl('');
+      setBackdropUrl('');
       setLogoDataUrl('');
       setAccentColor('#F20D28');
-      setVideoFile(null);
       setVideoUrl('');
-      setFileSizeMb(0);
-      setExtractedFrames([]);
+      setFileSizeMb(850);
       setKeywords('');
       setCast('Lead Performer');
       setDirector('Livingstone Saka');
@@ -195,9 +186,7 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         setVjBio(storedVjs[0].bio || '');
       } else {
         setSelectedVjName('VJ Junior');
-        setSelectedVjAvatarUrl(
-          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=240&auto=format&fit=crop&q=80'
-        );
+        setSelectedVjAvatarUrl('');
         setVjBio('Uganda’s premier blockbuster translator');
       }
     }
@@ -205,27 +194,7 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
 
   if (!isOpen) return null;
 
-  // File Handlers for Direct Device Uploads (NO URLs!)
-  const handlePosterSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      setPosterDataUrl(evt.target?.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleBackdropSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      setBackdropDataUrl(evt.target?.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
+  // Logo & VJ Image Handlers
   const handleLogoSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -274,89 +243,6 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // Video File Ingestion from device
-  const handleVideoFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setVideoFile(file);
-    const sizeMb = Math.round((file.size / (1024 * 1024)) * 10) / 10;
-    setFileSizeMb(sizeMb);
-    setVideoFormat(file.name.split('.').pop()?.toUpperCase() || 'MP4');
-
-    // Auto-fill title if empty
-    if (!title.trim()) {
-      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-      setTitle(cleanName);
-    }
-
-    setIsExtractingVideo(true);
-
-    try {
-      const objectUrl = URL.createObjectURL(file);
-      setVideoUrl(objectUrl);
-
-      // Create hidden video element to read metadata and extract snapshot frames
-      const tempVideo = document.createElement('video');
-      tempVideo.preload = 'metadata';
-      tempVideo.src = objectUrl;
-
-      await new Promise<void>((resolve) => {
-        tempVideo.onloadedmetadata = () => {
-          const duration = Math.max(1, Math.round(tempVideo.duration / 60));
-          setDurationMinutes(duration);
-          if (tempVideo.videoWidth && tempVideo.videoHeight) {
-            setVideoResolution(`${tempVideo.videoWidth}x${tempVideo.videoHeight}`);
-          }
-          resolve();
-        };
-        tempVideo.onerror = () => resolve();
-      });
-
-      // Capture frames for automatic thumbnail generation
-      const snapshots: string[] = [];
-      const canvas = document.createElement('canvas');
-      canvas.width = 480;
-      canvas.height = 720;
-      const ctx = canvas.getContext('2d');
-
-      const captureAt = async (timeSec: number): Promise<string | null> => {
-        return new Promise((res) => {
-          tempVideo.currentTime = timeSec;
-          tempVideo.onseeked = () => {
-            if (ctx) {
-              ctx.drawImage(tempVideo, 0, 0, 480, 720);
-              res(canvas.toDataURL('image/jpeg', 0.85));
-            } else {
-              res(null);
-            }
-          };
-          tempVideo.onerror = () => res(null);
-        });
-      };
-
-      const d = tempVideo.duration || 10;
-      const f1 = await captureAt(Math.min(3, d / 4));
-      if (f1) snapshots.push(f1);
-      const f2 = await captureAt(Math.min(10, d / 2));
-      if (f2) snapshots.push(f2);
-
-      setExtractedFrames(snapshots);
-
-      // If user hasn't uploaded a poster yet, auto-set first extracted frame
-      if (!posterDataUrl && snapshots[0]) {
-        setPosterDataUrl(snapshots[0]);
-      }
-      if (!backdropDataUrl && (snapshots[1] || snapshots[0])) {
-        setBackdropDataUrl(snapshots[1] || snapshots[0]);
-      }
-    } catch (err) {
-      console.warn('Video extraction error:', err);
-    } finally {
-      setIsExtractingVideo(false);
-    }
-  };
-
   // Save New VJ with Device Avatar
   const handleSaveNewVj = () => {
     if (!newVjName.trim()) {
@@ -366,9 +252,7 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
 
     const created = storageService.addVJ({
       name: newVjName.trim(),
-      avatar_url:
-        newVjAvatarUrl ||
-        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=240&auto=format&fit=crop&q=80',
+      avatar_url: newVjAvatarUrl || '',
       bio: newVjBio.trim() || 'Ugandan VJ Cinema Specialist',
       genres: primaryGenre,
     });
@@ -392,14 +276,14 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
       return;
     }
 
-    if (!synopsis.trim()) {
-      setErrorMessage('Please provide a Plot Synopsis for this movie.');
-      setActiveStepTab(1);
+    if (!videoUrl.trim()) {
+      setErrorMessage('Please paste a Video Stream URL.');
+      setActiveStepTab(2);
       return;
     }
 
-    if (!posterDataUrl) {
-      setErrorMessage('Please upload a Poster image from your device.');
+    if (!posterUrl.trim()) {
+      setErrorMessage('Please paste a Poster Image URL.');
       setActiveStepTab(2);
       return;
     }
@@ -417,112 +301,61 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         .map((k) => k.trim())
         .filter(Boolean);
 
-      const isLive = true; // Always published so movie appears on catalog and home screen immediately
+      const isLive = status === 'published' || publishDirectly;
 
-      // 1. Prepare FormData for persistent server Multer & SQLite upload
-      const fd = new FormData();
-      if (editingMovie) {
-        fd.append('id', editingMovie.id);
-      }
-      fd.append('title', title.trim());
-      fd.append('original_title', originalTitle.trim());
-      fd.append('synopsis', synopsis.trim());
-      fd.append('genre', primaryGenre);
-      fd.append('release_year', String(releaseYear));
-      fd.append('duration_minutes', String(durationMinutes));
-      fd.append('age_rating', ageRating);
-      fd.append('language', language);
-      fd.append('country', country);
-      fd.append('movie_type', movieType);
-      fd.append('is_active', 'true');
-      fd.append('is_featured', 'true');
-      fd.append('is_trending', 'true');
-      fd.append('is_recently_added', 'true');
-      fd.append('accent_color', accentColor);
-      fd.append('vj_name', selectedVjName);
-      fd.append('vj_avatar_url', selectedVjAvatarUrl);
-      fd.append('vj_bio', vjBio);
-      fd.append('director', selectedVjName || director);
-      fd.append('cast', JSON.stringify(castArray.length ? castArray : ['Lead Performer']));
-      fd.append('keywords', JSON.stringify(keywordsArray));
-      fd.append('video_qualities', JSON.stringify([videoQuality]));
-      fd.append('thumbnail_url', posterDataUrl || '');
-      fd.append('banner_url', backdropDataUrl || posterDataUrl || '');
-      fd.append('file_url', videoUrl || '');
-      fd.append('file_size_mb', String(fileSizeMb || 850));
+      const moviePayload: Movie = {
+        id: editingMovie ? editingMovie.id : `movie-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        title: title.trim(),
+        original_title: originalTitle.trim(),
+        synopsis: synopsis.trim() || 'Awaiting plot synopsis and details.',
+        genre: primaryGenre,
+        release_year: releaseYear,
+        duration_minutes: durationMinutes,
+        rating: editingMovie?.rating || 5.0,
+        review_count: editingMovie?.review_count || 0,
+        video_url: videoUrl.trim(),
+        poster_url: posterUrl.trim(),
+        file_url: videoUrl.trim(),
+        videoUrl: videoUrl.trim(),
+        thumbnail_url: posterUrl.trim(),
+        banner_url: (backdropUrl || posterUrl).trim(),
+        age_rating: ageRating,
+        language,
+        country,
+        movie_type: movieType,
+        is_active: isLive,
+        is_featured: isFeatured,
+        is_trending: isTrending,
+        is_recently_added: isRecentlyAdded,
+        accent_color: accentColor,
+        director: selectedVjName || director,
+        vj_name: selectedVjName,
+        vj_avatar_url: selectedVjAvatarUrl,
+        vj_bio: vjBio,
+        download_permission: 'free',
+        file_size_mb: fileSizeMb || 850,
+        cast: castArray.length ? castArray : ['Lead Performer'],
+        keywords: keywordsArray,
+        video_qualities: [videoQuality as any],
+        audio_tracks: [language, 'English [Stereo]'],
+        subtitles: ['English [CC]'],
+        created_at: editingMovie?.created_at || new Date().toISOString(),
+      };
 
-      if (videoFile) {
-        fd.append('movieFile', videoFile);
-      }
-
-      let savedMovie: Movie;
+      let savedMovie: Movie = moviePayload;
 
       try {
-        // Save to persistent server SQLite database + /uploads/
-        savedMovie = await apiService.uploadMovie(fd);
-      } catch (serverErr) {
-        console.warn('Server upload notice, falling back to local client store:', serverErr);
-        // Fallback local save
         if (editingMovie) {
-          savedMovie = storageService.updateMovie(editingMovie.id, {
-            title: title.trim(),
-            original_title: originalTitle.trim(),
-            synopsis: synopsis.trim(),
-            genre: primaryGenre,
-            release_year: releaseYear,
-            duration_minutes: durationMinutes,
-            age_rating: ageRating,
-            language,
-            country,
-            movie_type: movieType,
-            is_active: isLive,
-            is_featured: isFeatured,
-            is_trending: isTrending,
-            is_recently_added: isRecentlyAdded,
-            accent_color: accentColor,
-            vj_name: selectedVjName,
-            vj_avatar_url: selectedVjAvatarUrl,
-            vj_bio: vjBio,
-            director: selectedVjName || director,
-            cast: castArray.length ? castArray : ['Lead Performer'],
-            keywords: keywordsArray,
-            thumbnail_url: posterDataUrl,
-            banner_url: backdropDataUrl || posterDataUrl,
-            file_url: videoUrl || editingMovie.file_url,
-            file_size_mb: fileSizeMb || editingMovie.file_size_mb,
-          }) || editingMovie;
+          savedMovie = await apiService.updateMovie(editingMovie.id, moviePayload);
         } else {
-          savedMovie = storageService.addMovie({
-            title: title.trim(),
-            original_title: originalTitle.trim(),
-            synopsis: synopsis.trim(),
-            genre: primaryGenre,
-            release_year: releaseYear,
-            duration_minutes: durationMinutes,
-            age_rating: ageRating,
-            language,
-            country,
-            movie_type: movieType,
-            is_active: isLive,
-            is_featured: isFeatured,
-            is_trending: isTrending,
-            is_recently_added: isRecentlyAdded,
-            accent_color: accentColor,
-            vj_name: selectedVjName,
-            vj_avatar_url: selectedVjAvatarUrl,
-            vj_bio: vjBio,
-            director: selectedVjName || director,
-            cast: castArray.length ? castArray : ['Lead Performer'],
-            keywords: keywordsArray,
-            thumbnail_url: posterDataUrl,
-            banner_url: backdropDataUrl || posterDataUrl,
-            file_url: videoUrl,
-            download_permission: 'free',
-            file_size_mb: fileSizeMb || 850,
-            video_qualities: [videoQuality as any],
-            audio_tracks: [language, 'English [Stereo]'],
-            subtitles: ['English [CC]'],
-          });
+          savedMovie = await apiService.createMovie(moviePayload);
+        }
+      } catch (serverErr) {
+        console.warn('apiService save notice, using payload:', serverErr);
+        if (editingMovie) {
+          savedMovie = storageService.updateMovie(editingMovie.id, moviePayload) || moviePayload;
+        } else {
+          savedMovie = storageService.addMovie(moviePayload);
         }
       }
 
@@ -535,11 +368,6 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         storageService.saveMovies([savedMovie, ...currentList]);
       }
       saveMovieToFirestore(savedMovie);
-
-      // Save blob into IndexedDB for zero-latency local playback
-      if (videoFile) {
-        await mediaDB.saveVideoBlob(savedMovie.id, videoFile);
-      }
 
       onSaved(savedMovie);
       onClose();
@@ -833,93 +661,59 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
                 </div>
               </div>
 
-              {/* SECTION 3: VIDEO UPLOAD (FROM DEVICE) */}
+              {/* SECTION 3: VIDEO STREAM URL */}
               <div className="bg-[#121319] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-4 shadow-md">
                 <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
                   <span className="w-6 h-6 rounded-full bg-[#F20D28] text-white flex items-center justify-center text-xs font-bold shadow">
                     3
                   </span>
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Video Upload
+                    Video Stream URL
                   </h3>
                 </div>
 
-                {/* Drag & Drop Upload Zone */}
-                <div
-                  onClick={() => videoInputRef.current?.click()}
-                  className="border-2 border-dashed border-white/15 hover:border-[#F20D28]/60 bg-[#0a0b10] rounded-2xl p-6 text-center cursor-pointer transition-all group"
-                >
-                  <input
-                    type="file"
-                    ref={videoInputRef}
-                    accept="video/mp4,video/mkv,video/webm,video/*"
-                    onChange={handleVideoFileSelected}
-                    className="hidden"
-                  />
-                  <div className="w-12 h-12 rounded-full bg-red-950/60 border border-red-800/40 flex items-center justify-center text-[#F20D28] mx-auto mb-2.5 group-hover:scale-110 transition-transform">
-                    <Upload className="w-5 h-5" />
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-zinc-300 font-semibold text-xs mb-1.5">
+                      Paste Video Stream URL <span className="text-[#F20D28]">*</span>
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      placeholder="Paste Video Stream URL (e.g. https://domain.com/movie.mp4 or .m3u8)"
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.target.value)}
+                      className="w-full bg-[#0a0b10] border border-white/15 focus:border-[#F20D28] rounded-xl px-3.5 py-3 text-white text-xs font-mono placeholder:text-zinc-600 focus:outline-none transition-colors shadow-inner"
+                    />
+                    <p className="text-[11px] text-zinc-400 mt-1">
+                      Direct streaming link (MP4, WebM, HLS m3u8, or CDN URL). Heavy binary file uploads are replaced by instant URL streaming.
+                    </p>
                   </div>
-                  <h4 className="text-xs sm:text-sm font-bold text-white mb-1">
-                    Drag & drop your movie file here or <span className="text-[#F20D28]">click to browse</span>
-                  </h4>
-                  <p className="text-[11px] text-zinc-400">
-                    Supported: MP4, MKV, WebM (Max 10GB). File is saved securely on your device.
-                  </p>
+
+                  {/* Video URL Stream Preview */}
+                  {videoUrl && (
+                    <div className="bg-[#0a0b10] border border-white/10 rounded-xl p-3.5 space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between text-zinc-300">
+                        <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Stream URL Ready</span>
+                        </span>
+                        <span className="text-[11px] text-zinc-500 font-mono truncate max-w-[200px]">
+                          {videoUrl}
+                        </span>
+                      </div>
+
+                      <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-black border border-white/10">
+                        <video
+                          src={videoUrl}
+                          controls
+                          className="w-full h-full object-contain"
+                          onError={() => console.warn('Preview video stream load notice')}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {/* Upload Progress & Metadata */}
-                {(videoFile || videoUrl) && (
-                  <div className="bg-[#0a0b10] border border-white/10 rounded-xl p-3.5 space-y-2 text-xs">
-                    <div className="flex items-center justify-between text-zinc-300">
-                      <span className="font-semibold truncate max-w-[200px]">
-                        {videoFile?.name || title || 'Loaded Video'}
-                      </span>
-                      <span className="text-emerald-400 font-mono">Ready to Stream</span>
-                    </div>
-
-                    <div className="grid grid-cols-4 gap-2 pt-1 border-t border-white/5 text-[11px] text-zinc-400 font-mono">
-                      <div>
-                        <span className="text-zinc-500 block">File Size:</span>
-                        <span className="text-white font-semibold">{fileSizeMb} MB</span>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500 block">Resolution:</span>
-                        <span className="text-white font-semibold">{videoResolution}</span>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500 block">Duration:</span>
-                        <span className="text-white font-semibold">{durationMinutes} min</span>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500 block">Format:</span>
-                        <span className="text-white font-semibold">{videoFormat}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Auto-extracted Video Snapshots */}
-                {extractedFrames.length > 0 && (
-                  <div className="pt-2 border-t border-white/5 space-y-2">
-                    <span className="text-[11px] text-zinc-400 font-medium block">
-                      Auto-Generated Video Snapshots (Click to set as Poster):
-                    </span>
-                    <div className="flex items-center gap-3">
-                      {extractedFrames.map((frame, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => setPosterDataUrl(frame)}
-                          className="relative aspect-[2/3] w-20 rounded-lg overflow-hidden border border-white/20 hover:border-[#F20D28] cursor-pointer group shadow"
-                        >
-                          <img src={frame} alt="Snapshot" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[10px] font-bold text-white transition-opacity">
-                            Use
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* SECTION 6: SEARCH METADATA */}
@@ -967,143 +761,147 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
                 RIGHT COLUMN: 2. Poster & Backdrop, 4. VJ Assignment, 5. Genres
                ======================================================== */}
             <div className="space-y-6">
-              {/* SECTION 2: POSTER & BACKDROP (DEVICE UPLOADS ONLY - NO URLS) */}
+              {/* SECTION 2: POSTER & BACKDROP STREAM URLs */}
               <div className="bg-[#121319] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-4 shadow-md">
                 <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
                   <span className="w-6 h-6 rounded-full bg-[#F20D28] text-white flex items-center justify-center text-xs font-bold shadow">
                     2
                   </span>
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Poster & Backdrop
+                    Poster & Backdrop URLs
                   </h3>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Poster (Portrait 2:3) */}
-                  <div className="space-y-1.5">
-                    <label className="block text-zinc-300 font-semibold text-xs">
-                      Poster (Portrait 2:3) <span className="text-[#F20D28]">*</span>
+                <div className="space-y-4">
+                  {/* Poster Image URL Input */}
+                  <div>
+                    <label className="block text-zinc-300 font-semibold text-xs mb-1.5">
+                      Paste Poster Image URL <span className="text-[#F20D28]">*</span>
                     </label>
-
-                    {posterDataUrl ? (
-                      <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden border border-white/15 bg-black group">
-                        <img
-                          src={posterDataUrl}
-                          alt="Poster"
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
-                          <button
-                            type="button"
-                            onClick={() => posterInputRef.current?.click()}
-                            className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold cursor-pointer"
-                          >
-                            Change
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPosterDataUrl('')}
-                            className="p-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        onClick={() => posterInputRef.current?.click()}
-                        className="aspect-[2/3] w-full border-2 border-dashed border-white/15 hover:border-[#F20D28] rounded-xl flex flex-col items-center justify-center p-4 text-center cursor-pointer bg-[#0a0b10] transition-colors"
-                      >
-                        <ImageIcon className="w-7 h-7 text-zinc-400 mb-1.5" />
-                        <span className="text-xs font-bold text-white">Upload Poster</span>
-                        <span className="text-[10px] text-zinc-500">JPG, PNG (Max 5MB)</span>
-                      </div>
-                    )}
                     <input
-                      type="file"
-                      ref={posterInputRef}
-                      accept="image/*"
-                      onChange={handlePosterSelected}
-                      className="hidden"
+                      type="url"
+                      required
+                      placeholder="Paste Poster Image URL (e.g. https://domain.com/poster.jpg)"
+                      value={posterUrl}
+                      onChange={(e) => setPosterUrl(e.target.value)}
+                      className="w-full bg-[#0a0b10] border border-white/15 focus:border-[#F20D28] rounded-xl px-3.5 py-2.5 text-white text-xs font-mono placeholder:text-zinc-600 focus:outline-none transition-colors shadow-inner"
                     />
+                    <p className="text-[11px] text-zinc-400 mt-1">
+                      Direct HTTPS image link for movie poster thumbnail (2:3 aspect ratio).
+                    </p>
                   </div>
 
-                  {/* Backdrop (Landscape 16:9) */}
-                  <div className="space-y-1.5">
-                    <label className="block text-zinc-300 font-semibold text-xs">
-                      Backdrop (Landscape 16:9)
+                  {/* Backdrop Image URL Input */}
+                  <div>
+                    <label className="block text-zinc-300 font-semibold text-xs mb-1.5">
+                      Paste Backdrop Image URL (Optional)
                     </label>
+                    <input
+                      type="url"
+                      placeholder="Paste Backdrop Image URL (e.g. https://domain.com/backdrop.jpg)"
+                      value={backdropUrl}
+                      onChange={(e) => setBackdropUrl(e.target.value)}
+                      className="w-full bg-[#0a0b10] border border-white/15 focus:border-[#F20D28] rounded-xl px-3.5 py-2.5 text-white text-xs font-mono placeholder:text-zinc-600 focus:outline-none transition-colors shadow-inner"
+                    />
+                    <p className="text-[11px] text-zinc-400 mt-1">
+                      Wide 16:9 banner for hero background. If omitted, the poster URL is used automatically.
+                    </p>
+                  </div>
 
-                    {backdropDataUrl ? (
-                      <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden border border-white/15 bg-black group">
-                        <img
-                          src={backdropDataUrl}
-                          alt="Backdrop"
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
+                  {/* Poster & Backdrop Live Previews */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {/* Poster Preview */}
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-semibold text-zinc-400">Poster Preview</span>
+                      {posterUrl ? (
+                        <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden border border-white/15 bg-black group">
+                          <img
+                            src={posterUrl}
+                            alt="Poster Preview"
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.opacity = '0.3';
+                            }}
+                          />
                           <button
                             type="button"
-                            onClick={() => backdropInputRef.current?.click()}
-                            className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold cursor-pointer"
+                            onClick={() => setPosterUrl('')}
+                            className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-red-600 text-white transition-colors cursor-pointer"
+                            title="Clear poster URL"
                           >
-                            Change
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setBackdropDataUrl('')}
-                            className="p-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      </div>
-                    ) : (
-                      <div
-                        onClick={() => backdropInputRef.current?.click()}
-                        className="aspect-[16/9] w-full border-2 border-dashed border-white/15 hover:border-[#F20D28] rounded-xl flex flex-col items-center justify-center p-4 text-center cursor-pointer bg-[#0a0b10] transition-colors"
-                      >
-                        <ImageIcon className="w-7 h-7 text-zinc-400 mb-1.5" />
-                        <span className="text-xs font-bold text-white">Upload Backdrop</span>
-                        <span className="text-[10px] text-zinc-500">JPG, PNG (Max 10MB)</span>
-                      </div>
-                    )}
-                    <input
-                      type="file"
-                      ref={backdropInputRef}
-                      accept="image/*"
-                      onChange={handleBackdropSelected}
-                      className="hidden"
-                    />
+                      ) : (
+                        <div className="aspect-[2/3] w-full border border-dashed border-white/15 rounded-xl flex flex-col items-center justify-center p-4 text-center bg-[#0a0b10]">
+                          <ImageIcon className="w-6 h-6 text-zinc-500 mb-1" />
+                          <span className="text-xs text-zinc-500">Paste poster URL above to preview</span>
+                        </div>
+                      )}
+                    </div>
 
-                    {/* Logo & Accent Color Row */}
-                    <div className="pt-2 flex items-center justify-between gap-3">
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => logoInputRef.current?.click()}
-                          className="text-[11px] text-zinc-400 hover:text-white font-medium flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>{logoDataUrl ? 'Change Title Logo' : 'Upload Title Logo'}</span>
-                        </button>
-                        <input
-                          type="file"
-                          ref={logoInputRef}
-                          accept="image/png,image/*"
-                          onChange={handleLogoSelected}
-                          className="hidden"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-zinc-400">Accent:</span>
-                        <input
-                          type="color"
-                          value={accentColor}
-                          onChange={(e) => setAccentColor(e.target.value)}
-                          className="w-6 h-6 rounded cursor-pointer bg-transparent border-0"
-                        />
-                      </div>
+                    {/* Backdrop Preview */}
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-semibold text-zinc-400">Backdrop Preview</span>
+                      {backdropUrl || posterUrl ? (
+                        <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden border border-white/15 bg-black group">
+                          <img
+                            src={backdropUrl || posterUrl}
+                            alt="Backdrop Preview"
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.opacity = '0.3';
+                            }}
+                          />
+                          {backdropUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setBackdropUrl('')}
+                              className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-red-600 text-white transition-colors cursor-pointer"
+                              title="Clear backdrop URL"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="aspect-[16/9] w-full border border-dashed border-white/15 rounded-xl flex flex-col items-center justify-center p-4 text-center bg-[#0a0b10]">
+                          <ImageIcon className="w-6 h-6 text-zinc-500 mb-1" />
+                          <span className="text-xs text-zinc-500">Paste backdrop URL above to preview</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Logo & Accent Color Row */}
+                  <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-3">
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => logoInputRef.current?.click()}
+                        className="text-[11px] text-zinc-400 hover:text-white font-medium flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{logoDataUrl ? 'Change Title Logo' : 'Upload Title Logo'}</span>
+                      </button>
+                      <input
+                        type="file"
+                        ref={logoInputRef}
+                        accept="image/png,image/*"
+                        onChange={handleLogoSelected}
+                        className="hidden"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-zinc-400">Accent:</span>
+                      <input
+                        type="color"
+                        value={accentColor}
+                        onChange={(e) => setAccentColor(e.target.value)}
+                        className="w-6 h-6 rounded cursor-pointer bg-transparent border-0"
+                      />
                     </div>
                   </div>
                 </div>

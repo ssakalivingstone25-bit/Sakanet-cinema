@@ -1,5 +1,4 @@
 import { Movie, VJ, UserReview, DownloadItem, UserProfile, WatchProgress } from '../types';
-import { INITIAL_FEATURED_MOVIES } from './seedMovies';
 
 const STORAGE_KEYS = {
   MOVIES: 'sakanet_movies_v2',
@@ -26,38 +25,15 @@ export const guestUser: UserProfile = {
 export const defaultUser = guestUser;
 
 export const storageService = {
-  // --- MOVIES (Strictly ONLY movies uploaded and published by the admin) ---
+  // --- MOVIES (Strictly real movies from database/user URL streaming) ---
   getMovies(): Movie[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.MOVIES);
-      if (!data) {
-        return [];
-      }
+      if (!data) return [];
       const parsed = JSON.parse(data);
-      if (!Array.isArray(parsed)) {
-        return [];
-      }
-      // Strictly ensure catalog only contains actual movies uploaded by admin
-      const nonSimulated = parsed.filter(
-        (m: Movie) =>
-          !m.id.startsWith('movie-the-last-') &&
-          !m.id.startsWith('movie-broken-dreams-') &&
-          !m.id.startsWith('movie-city-shadows-') &&
-          !m.id.startsWith('movie-the-journey-') &&
-          !m.id.startsWith('movie-the-whisper-') &&
-          !m.id.startsWith('movie-the-escape-') &&
-          !m.id.startsWith('movie-shadow-line-') &&
-          !m.id.startsWith('movie-higher-ground-') &&
-          !m.id.startsWith('movie-beyond-earth-') &&
-          !m.id.startsWith('movie-the-silent-hour-') &&
-          !m.id.startsWith('movie-redemption-road-') &&
-          !m.id.startsWith('movie-eternal-echoes-') &&
-          !m.id.startsWith('movie-shadow-protocol-')
-      );
-      if (nonSimulated.length !== parsed.length) {
-        this.saveMovies(nonSimulated);
-      }
-      return nonSimulated;
+      if (!Array.isArray(parsed)) return [];
+      // Clean, validate real movies with valid video_url or file_url and title
+      return parsed.filter((m: Movie) => m && m.id && m.title && (m.video_url || m.file_url));
     } catch {
       return [];
     }
