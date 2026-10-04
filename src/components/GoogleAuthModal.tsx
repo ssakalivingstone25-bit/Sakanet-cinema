@@ -150,12 +150,12 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
           </div>
 
           <h3 className="text-xl font-bold font-display text-white">
-            {isSignedIn ? 'Google Account Connected' : 'Choose Your Google Account'}
+            {isSignedIn ? 'Google Account Connected' : 'Sign In with Google'}
           </h3>
           <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto leading-relaxed">
             {isSignedIn
               ? 'Your cinema session is authenticated and stored securely.'
-              : 'Sign in to choose your Google Account. Administrators and viewers must authenticate to proceed.'}
+              : 'Sign in to access your profile, bookmarks, and downloads.'}
           </p>
         </div>
 
@@ -246,32 +246,21 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 text-xs font-semibold transition-colors cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
-                <span>{loading ? 'Switching...' : 'Switch Account / Sign Out'}</span>
+                <span>{loading ? 'Switching...' : 'Sign Out'}</span>
               </button>
 
               <button
                 onClick={onClose}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold shadow-lg shadow-red-700/30 transition-all cursor-pointer"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-[#E50914] hover:bg-[#d60b23] text-white text-xs font-semibold shadow-lg shadow-red-700/30 transition-all cursor-pointer"
               >
-                Continue to Cinema
+                Close
               </button>
             </div>
           </div>
         ) : (
           /* Sign In Options */
           <div className="space-y-3.5">
-            <div className="space-y-1.5 text-xs text-zinc-400 pb-1">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Choose your Google account to authenticate your cinema profile.</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Synchronized watchlists and offline downloads for smooth playback.</span>
-              </div>
-            </div>
-
-            {/* Primary Google Sign-In (Popup with forced account chooser) */}
+            {/* Primary Google Sign-In Button */}
             <button
               onClick={handleSignInPopup}
               disabled={loading}
@@ -295,21 +284,20 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
-              <span>{loading ? 'Opening Google Account Chooser...' : 'Sign In with Google (Choose Account)'}</span>
+              <span>{loading ? 'Signing in with Google...' : 'Continue with Google'}</span>
             </button>
 
             {/* Redirect fallback if popup blocked */}
             <button
               onClick={handleSignInRedirect}
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 text-xs font-semibold transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-zinc-400 hover:text-white text-xs transition-colors cursor-pointer"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>Redirect to Google Account Chooser</span>
+              <span>Having trouble with popups? Use direct sign-in</span>
             </button>
 
-            <p className="text-[10px] text-zinc-500 text-center pt-1">
-              By connecting, you agree to Sakanet Cinema Terms of Service and Privacy Policy.
+            <p className="text-[11px] text-zinc-500 text-center pt-1">
+              By continuing, you agree to Sakanet Cinema Terms of Service and Privacy Policy.
             </p>
           </div>
         )}
