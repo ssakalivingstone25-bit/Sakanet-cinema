@@ -192,6 +192,137 @@ try {
   db.exec('UPDATE movies SET is_active = 1 WHERE is_active = 0');
 } catch {}
 
+// Seed high-definition cinematic starter movies if database is brand new
+try {
+  const countRow = db.prepare('SELECT COUNT(*) as count FROM movies').get() as any;
+  if (!countRow || countRow.count === 0) {
+    const seedMovies = [
+      {
+        id: 'movie-tears-of-steel',
+        title: 'Tears of Steel: Kampala Outpost',
+        original_title: 'Tears of Steel',
+        synopsis: 'In a dystopian future, a squad of elite cyber-warriors and Ugandan commandos attempt to change history and save civilization from rogue machines.',
+        genre: 'Sci-Fi',
+        release_year: 2024,
+        duration_minutes: 74,
+        age_rating: '16+',
+        vj_name: 'VJ Junior',
+        vj_avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        vj_bio: 'Uganda’s undisputed king of blockbuster Luganda translations.',
+        director: 'Ian Hubert & VJ Junior',
+        cast: JSON.stringify(['Derek de Lint', 'Sergio Hasselbaink', 'Rogier Schippers']),
+        keywords: JSON.stringify(['sci-fi', 'cyberpunk', 'action', 'vj junior', 'luganda']),
+        video_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        poster_url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=600&q=80',
+        thumbnail_url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=600&q=80',
+        banner_url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=1200&q=80',
+        file_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        filename: '',
+        file_size_mb: 750,
+        video_qualities: JSON.stringify(['1080p FHD', '720p HD']),
+        audio_tracks: JSON.stringify(['Luganda [VJ Junior Translation]', 'English [Stereo]']),
+        subtitles: JSON.stringify(['English [CC]']),
+        rating: 4.9,
+        review_count: 86,
+        is_active: 1,
+        is_featured: 1,
+        is_trending: 1,
+        is_recently_added: 1,
+        download_permission: 'free',
+      },
+      {
+        id: 'movie-sintel-dragon',
+        title: 'Sintel: The Dragon Quest',
+        original_title: 'Sintel',
+        synopsis: 'A lonely young warrior girl befriends a wounded baby dragon, embarking on a dangerous journey across mythical mountain kingdoms to rescue her companion.',
+        genre: 'Adventure',
+        release_year: 2024,
+        duration_minutes: 52,
+        age_rating: '13+',
+        vj_name: 'VJ Jingo',
+        vj_avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+        vj_bio: 'Master of epic fantasy, emotional drama and thrilling dialogue.',
+        director: 'Colin Levy & VJ Jingo',
+        cast: JSON.stringify(['Halina Reijn', 'Thom Hoffman']),
+        keywords: JSON.stringify(['fantasy', 'dragon', 'adventure', 'vj jingo']),
+        video_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+        poster_url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80',
+        thumbnail_url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80',
+        banner_url: 'https://images.unsplash.com/photo-1514539079130-25950c84af65?auto=format&fit=crop&w=1200&q=80',
+        file_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+        filename: '',
+        file_size_mb: 620,
+        video_qualities: JSON.stringify(['1080p FHD', '720p HD']),
+        audio_tracks: JSON.stringify(['Luganda [VJ Jingo Translation]', 'English [Stereo]']),
+        subtitles: JSON.stringify(['English [CC]']),
+        rating: 4.8,
+        review_count: 54,
+        is_active: 1,
+        is_featured: 1,
+        is_trending: 1,
+        is_recently_added: 1,
+        download_permission: 'free',
+      },
+      {
+        id: 'movie-big-buck-bunny',
+        title: 'Big Buck Bunny: Return of the King',
+        original_title: 'Big Buck Bunny',
+        synopsis: 'A gigantic gentle giant rabbit decides to protect the forest and exact hilarious revenge on mischievous woodland bullies.',
+        genre: 'Comedy',
+        release_year: 2024,
+        duration_minutes: 60,
+        age_rating: 'All',
+        vj_name: 'VJ Emmy',
+        vj_avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
+        vj_bio: 'Kampala comedy master and high-energy animation specialist.',
+        director: 'Sacha Goedegebure & VJ Emmy',
+        cast: JSON.stringify(['Bunny', 'Rinky', 'Gimera', 'Frank']),
+        keywords: JSON.stringify(['comedy', 'animation', 'vj emmy', 'family']),
+        video_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        poster_url: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=600&q=80',
+        thumbnail_url: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=600&q=80',
+        banner_url: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=80',
+        file_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        filename: '',
+        file_size_mb: 550,
+        video_qualities: JSON.stringify(['1080p FHD', '720p HD']),
+        audio_tracks: JSON.stringify(['Luganda [VJ Emmy Translation]', 'English [Stereo]']),
+        subtitles: JSON.stringify(['English [CC]']),
+        rating: 4.7,
+        review_count: 42,
+        is_active: 1,
+        is_featured: 1,
+        is_trending: 1,
+        is_recently_added: 1,
+        download_permission: 'free',
+      },
+    ];
+
+    const insertStmt = db.prepare(
+      `INSERT INTO movies (
+        id, title, original_title, synopsis, genre, release_year, duration_minutes,
+        age_rating, vj_name, vj_avatar_url, vj_bio, director, cast, keywords,
+        video_url, poster_url, thumbnail_url, banner_url, file_url, filename, file_size_mb, video_qualities,
+        audio_tracks, subtitles, rating, review_count, is_active, is_featured,
+        is_trending, is_recently_added, download_permission, uploaded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+    );
+
+    for (const sm of seedMovies) {
+      insertStmt.run(
+        sm.id, sm.title, sm.original_title, sm.synopsis, sm.genre, sm.release_year, sm.duration_minutes,
+        sm.age_rating, sm.vj_name, sm.vj_avatar_url, sm.vj_bio, sm.director, sm.cast, sm.keywords,
+        sm.video_url, sm.poster_url, sm.thumbnail_url, sm.banner_url, sm.file_url, sm.filename, sm.file_size_mb, sm.video_qualities,
+        sm.audio_tracks, sm.subtitles, sm.rating, sm.review_count, sm.is_active, sm.is_featured,
+        sm.is_trending, sm.is_recently_added, sm.download_permission
+      );
+    }
+    console.log('Seeded starter movies into SQLite database.');
+  }
+} catch (e) {
+  console.warn('Movie seed notice:', e);
+}
+
 console.log('Connected to persistent SQLite database at:', dbPath);
 
 // Helper to format SQLite movie record for React frontend
@@ -449,10 +580,9 @@ app.get('/api/movies', (_req: Request, res: Response) => {
 // Create / update Movie metadata via JSON
 app.post('/api/movies', (req: Request, res: Response) => {
   try {
-    const movie = req.body;
-    if (!movie.id || !movie.title) {
-      return res.status(400).json({ error: 'Missing movie ID or title' });
-    }
+    const movie = req.body || {};
+    const id = movie.id ? String(movie.id) : `movie-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const title = (movie.title || 'Untitled Movie').trim();
 
     const cast = JSON.stringify(movie.cast || ['Lead Performer']);
     const keywords = JSON.stringify(movie.keywords || []);

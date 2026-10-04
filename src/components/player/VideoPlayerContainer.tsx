@@ -322,8 +322,8 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
           try {
             await (screen.orientation as any).lock('landscape');
             setIsLandscapeLocked(true);
-          } catch (e) {
-            console.warn('Orientation lock notice:', e);
+          } catch (e: any) {
+            console.warn('Orientation lock notice:', e?.message || String(e));
           }
         }
       } catch (err) {
@@ -389,7 +389,7 @@ export const VideoPlayerContainer: React.FC<VideoPlayerContainerProps> = ({
         onEnterMiniPlayer(currentMovie, cur, playing);
       }
     } catch (e: any) {
-      console.warn('PiP error:', e);
+      console.warn('PiP error:', e?.message || String(e));
       setShowPipGuideModal(true);
     }
   }, [currentMovie, onEnterMiniPlayer]);

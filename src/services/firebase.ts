@@ -234,14 +234,37 @@ export function onAuthChange(callback: (user: FirebaseUser | null) => void) {
 }
 
 /**
+ * Sanitize data for Firestore to avoid 400 Bad Request or invalid-argument errors
+ */
+function sanitizeForFirestore(obj: any): any {
+  if (obj === undefined) return null;
+  if (obj === null) return null;
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeForFirestore).filter((v) => v !== undefined);
+  }
+  if (typeof obj === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (val !== undefined) {
+        cleaned[key] = sanitizeForFirestore(val);
+      }
+    }
+    return cleaned;
+  }
+  return obj;
+}
+
+/**
  * Cloud Firestore movie sync
  */
 export async function saveMovieToFirestore(movie: any): Promise<void> {
+  if (!movie || !movie.id) return;
   try {
-    const movieRef = doc(db, 'movies', movie.id);
-    await setDoc(movieRef, movie, { merge: true });
+    const cleanData = sanitizeForFirestore(movie);
+    const movieRef = doc(db, 'movies', String(movie.id));
+    await setDoc(movieRef, cleanData, { merge: true });
   } catch (err) {
-    console.warn('Firestore movie sync notice:', err);
+    console.warn('Firestore movie sync notice (handled gracefully):', err);
   }
 }
 

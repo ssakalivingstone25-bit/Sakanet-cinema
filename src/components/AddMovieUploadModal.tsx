@@ -51,6 +51,17 @@ const PRIMARY_GENRES = [
   'Martial Arts',
 ];
 
+const DEFAULT_GENRE_POSTERS: Record<string, string> = {
+  Action: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=600&q=80',
+  'Sci-Fi': 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=600&q=80',
+  Adventure: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80',
+  Comedy: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=600&q=80',
+  Drama: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=600&q=80',
+  Thriller: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=600&q=80',
+  Horror: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80',
+  Animation: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=600&q=80',
+};
+
 const AGE_RATINGS = ['All', 'PG-13', '16+', '18+', 'R'];
 const LANGUAGES = ['Luganda [VJ Translation]', 'English', 'Luganda', 'Swahili', 'French'];
 const VIDEO_QUALITIES = ['HD (1080p)', '4K UHD', '720p HD', '480p SD'];
@@ -303,19 +314,9 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         setActiveStepTab(2);
         return;
       }
-      if (!posterFile && !posterUrl.trim() && !posterPreviewUrl && !editingMovie) {
-        setErrorMessage('Please select a movie poster image from your device.');
-        setActiveStepTab(2);
-        return;
-      }
     } else {
       if (!videoUrl.trim() && !editingMovie) {
         setErrorMessage('Please paste a direct video stream link.');
-        setActiveStepTab(2);
-        return;
-      }
-      if (!posterUrl.trim() && !editingMovie) {
-        setErrorMessage('Please paste a poster image link.');
         setActiveStepTab(2);
         return;
       }
@@ -371,10 +372,11 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         formData.append('subtitles', JSON.stringify(['English [CC]']));
         formData.append('file_size_mb', String(fileSizeMb));
 
-        // If fallback URLs exist, send them too
-        if (videoUrl) formData.append('video_url', videoUrl);
-        if (posterUrl) formData.append('poster_url', posterUrl);
-        if (backdropUrl) formData.append('banner_url', backdropUrl);
+        // Attach media URLs with fallback
+        const effectivePoster = posterUrl.trim() || DEFAULT_GENRE_POSTERS[primaryGenre] || DEFAULT_GENRE_POSTERS['Action'];
+        formData.append('poster_url', effectivePoster);
+        formData.append('banner_url', (backdropUrl || effectivePoster).trim());
+        if (videoUrl) formData.append('video_url', videoUrl.trim());
 
         // Attach actual binary files
         if (movieFile) formData.append('movieFile', movieFile);
@@ -445,7 +447,11 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
       }
 
       // Sync into Cloud Firestore database (ai-studio-sakanet-e2034e9a-6112-4f29-b445-7009f6a22938)
-      await saveMovieToFirestore(savedMovie);
+      try {
+        await saveMovieToFirestore(savedMovie);
+      } catch (firestoreErr) {
+        console.warn('Firestore cloud sync notice (local copy saved):', firestoreErr);
+      }
 
       onSaved(savedMovie);
       onClose();
