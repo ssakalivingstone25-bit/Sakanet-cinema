@@ -15,6 +15,9 @@ import {
   PlusCircle,
   Sparkles,
   Sliders,
+  FileVideo,
+  Download,
+  Maximize2,
 } from 'lucide-react';
 import { Movie, DownloadItem, UserProfile, WatchProgress, WatchHistoryItem, RecommendedMovie } from '../types';
 import { recommendationEngine } from '../services/recommendationEngine';
@@ -340,84 +343,123 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
       ) : (
         <>
           {/* ========================================================
-              SECTION 2: FEATURED MOVIE HERO BANNER (Admin Published Movie)
+              SECTION 2: MASTER CINEMA SPOTLIGHT (Master File Preview Style)
              ======================================================== */}
           {currentHeroMovie && !isFilteringActive && (
-            <section className="relative w-full rounded-2xl overflow-hidden bg-[#121319] border border-white/10 shadow-2xl mb-6 group">
-              <div className="relative w-full aspect-[16/10] sm:aspect-[21/10] overflow-hidden">
-                <img
-                  src={currentHeroMovie.banner_url || currentHeroMovie.thumbnail_url}
-                  alt={currentHeroMovie.title}
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
-                />
-
-                <div className="absolute inset-0 bg-gradient-to-t from-[#08090D] via-[#08090D]/65 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-r from-[#08090D] via-[#08090D]/50 to-transparent w-full sm:w-3/4" />
-
-                <div className="absolute inset-0 p-5 sm:p-7 flex flex-col justify-end">
-                  <div className="flex flex-col mb-2">
-                    <span className="text-white text-xl sm:text-2xl font-black font-display tracking-wider uppercase leading-none drop-shadow-md">
-                      FEATURED
-                    </span>
-                    <span className="text-[#F20D28] text-2xl sm:text-3xl font-black italic tracking-wide -mt-1 font-display drop-shadow-[0_2px_8px_rgba(242,13,40,0.6)]">
-                      TONIGHT
-                    </span>
+            <section className="bg-[#0e0f15] border border-white/15 rounded-2xl p-4 sm:p-5 shadow-2xl mb-6 space-y-4">
+              {/* Top Header Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-11 h-11 rounded-xl bg-red-950/80 border border-red-700/50 flex items-center justify-center text-[#E50914] shadow-lg shrink-0">
+                    <FileVideo className="w-6 h-6" />
                   </div>
-
-                  <div className="flex items-center gap-2 text-xs font-bold text-zinc-300 mb-1.5">
-                    <span className="text-white font-extrabold">{currentHeroMovie.title}</span>
-                    <span>•</span>
-                    <span className="text-[#F20D28]">{currentHeroMovie.genre}</span>
-                    {currentHeroMovie.vj_name && (
-                      <>
-                        <span>•</span>
-                        <span className="text-zinc-300 font-semibold">{currentHeroMovie.vj_name}</span>
-                      </>
-                    )}
-                  </div>
-
-                  <p className="text-xs sm:text-sm text-zinc-200 line-clamp-2 max-w-md font-normal leading-relaxed drop-shadow mb-4">
-                    {currentHeroMovie.synopsis}
-                  </p>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        onClick={() => onPlayMovie(currentHeroMovie)}
-                        className="flex items-center gap-2 bg-[#F20D28] hover:bg-[#d60b23] text-white text-xs sm:text-sm font-extrabold px-5 py-2.5 rounded-full shadow-lg shadow-red-700/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                      >
-                        <Play className="w-4 h-4 fill-current" />
-                        <span>WATCH NOW</span>
-                      </button>
-
-                      <button
-                        onClick={() => onSelectMovie(currentHeroMovie)}
-                        className="flex items-center gap-1.5 bg-black/60 hover:bg-black/85 text-white border border-white/20 text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-full backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                      >
-                        <Info className="w-4 h-4 text-zinc-300" />
-                        <span>Details</span>
-                      </button>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#E50914] text-white">
+                        CINEMA SPOTLIGHT
+                      </span>
+                      <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/40 hidden sm:inline">
+                        Range Streaming Active
+                      </span>
                     </div>
-
-                    {featuredMovies.length > 1 && (
-                      <div className="flex items-center gap-1.5 bg-black/40 px-2.5 py-1.5 rounded-full backdrop-blur-sm border border-white/10">
-                        {featuredMovies.map((_, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => setHeroIndex(idx)}
-                            className={`transition-all rounded-full cursor-pointer ${
-                              idx === heroIndex
-                                ? 'w-2.5 h-2.5 bg-[#F20D28] shadow-[0_0_6px_#F20D28]'
-                                : 'w-1.5 h-1.5 bg-zinc-600 hover:bg-zinc-400'
-                            }`}
-                            title={`Slide ${idx + 1}`}
-                            aria-label={`Go to slide ${idx + 1}`}
-                          />
-                        ))}
-                      </div>
-                    )}
+                    <h2 className="text-base sm:text-xl font-bold font-display text-white truncate mt-1">
+                      {currentHeroMovie.title}
+                    </h2>
+                    <div className="text-[11px] text-zinc-400 font-mono mt-0.5 flex items-center gap-2 flex-wrap">
+                      <span>{currentHeroMovie.file_size_mb || 750} MB</span>
+                      <span>·</span>
+                      <span className="text-[#E50914] font-semibold">{currentHeroMovie.vj_name || 'VJ Junior'}</span>
+                      <span>·</span>
+                      <span>{currentHeroMovie.release_year}</span>
+                      <span>·</span>
+                      <span>{currentHeroMovie.genre}</span>
+                      <span>·</span>
+                      <span>{currentHeroMovie.duration_minutes || 120} min</span>
+                    </div>
                   </div>
+                </div>
+
+                {/* Top Action Buttons & Slide dots */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => onPlayMovie(currentHeroMovie)}
+                    className="flex items-center gap-2 bg-[#E50914] hover:bg-[#d60b23] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg shadow-red-700/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span>Watch Fullscreen</span>
+                  </button>
+
+                  <button
+                    onClick={() => onDownloadMovie(currentHeroMovie)}
+                    className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/10 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                    title="Download to Device Storage"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="hidden md:inline">Download</span>
+                  </button>
+
+                  <button
+                    onClick={() => onSelectMovie(currentHeroMovie)}
+                    className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/10 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                    <span>Details</span>
+                  </button>
+
+                  {featuredMovies.length > 1 && (
+                    <div className="flex items-center gap-1 bg-black/60 px-2 py-1.5 rounded-xl border border-white/10 ml-1">
+                      {featuredMovies.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setHeroIndex(idx)}
+                          className={`transition-all rounded-full cursor-pointer ${
+                            idx === heroIndex
+                              ? 'w-2.5 h-2.5 bg-[#E50914] shadow-[0_0_6px_#E50914]'
+                              : 'w-1.5 h-1.5 bg-zinc-600 hover:bg-zinc-400'
+                          }`}
+                          title={`Slide ${idx + 1}`}
+                          aria-label={`Go to slide ${idx + 1}`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Contained Master Cinema Player Frame */}
+              <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black border border-white/10 shadow-2xl">
+                {currentHeroMovie.video_url || currentHeroMovie.file_url ? (
+                  <video
+                    key={currentHeroMovie.id}
+                    src={currentHeroMovie.video_url || currentHeroMovie.file_url}
+                    poster={currentHeroMovie.banner_url || currentHeroMovie.thumbnail_url || currentHeroMovie.poster_url}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <img
+                    src={currentHeroMovie.banner_url || currentHeroMovie.thumbnail_url}
+                    alt={currentHeroMovie.title}
+                    className="w-full h-full object-cover"
+                  />
+                )}
+              </div>
+
+              {/* Bottom Plot & Details Strip */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 text-xs">
+                <p className="text-xs text-zinc-300 line-clamp-2 max-w-2xl font-normal leading-relaxed">
+                  {currentHeroMovie.synopsis}
+                </p>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-zinc-300 text-[11px] font-mono">
+                    Audio: Luganda [VJ Translation]
+                  </span>
+                  <span className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-zinc-300 text-[11px] font-mono">
+                    1080p FHD
+                  </span>
                 </div>
               </div>
             </section>

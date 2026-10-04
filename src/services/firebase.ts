@@ -237,15 +237,17 @@ export function onAuthChange(callback: (user: FirebaseUser | null) => void) {
  * Sanitize data for Firestore to avoid 400 Bad Request or invalid-argument errors
  */
 function sanitizeForFirestore(obj: any): any {
-  if (obj === undefined) return null;
-  if (obj === null) return null;
+  if (obj === undefined || obj === null) return null;
+  if (typeof obj === 'function' || typeof obj === 'symbol') return null;
+  if (typeof obj === 'number') return isNaN(obj) ? 0 : obj;
   if (Array.isArray(obj)) {
-    return obj.map(sanitizeForFirestore).filter((v) => v !== undefined);
+    return obj.map(sanitizeForFirestore).filter((v) => v !== undefined && v !== null);
   }
   if (typeof obj === 'object') {
+    if (obj instanceof Element || obj instanceof Node) return null;
     const cleaned: Record<string, any> = {};
     for (const [key, val] of Object.entries(obj)) {
-      if (val !== undefined) {
+      if (val !== undefined && typeof val !== 'function' && typeof val !== 'symbol') {
         cleaned[key] = sanitizeForFirestore(val);
       }
     }
@@ -261,7 +263,8 @@ export async function saveMovieToFirestore(movie: any): Promise<void> {
   if (!movie || !movie.id) return;
   try {
     const cleanData = sanitizeForFirestore(movie);
-    const movieRef = doc(db, 'movies', String(movie.id));
+    const safeDocId = String(movie.id).replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const movieRef = doc(db, 'movies', safeDocId);
     await setDoc(movieRef, cleanData, { merge: true });
   } catch (err) {
     console.warn('Firestore movie sync notice (handled gracefully):', err);

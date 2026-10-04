@@ -404,12 +404,9 @@ app.post('/api/upload', upload.any(), (req: Request, res: Response) => {
     const body = req.body || {};
     const title = (
       body.title ||
-      (movieFile ? path.basename(movieFile.originalname, path.extname(movieFile.originalname)) : 'Untitled Movie')
+      (movieFile ? path.basename(movieFile.originalname, path.extname(movieFile.originalname)).replace(/[_-]/g, ' ') : '') ||
+      'Untitled Cinema Masterpiece'
     ).trim();
-
-    if (!title && !movieFile) {
-      return res.status(400).json({ error: 'Missing title or movie file.' });
-    }
 
     const id = body.id ? String(body.id) : `movie-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const filename = movieFile ? movieFile.filename : (body.filename || '');
@@ -627,8 +624,8 @@ app.post('/api/movies', (req: Request, res: Response) => {
         is_recently_added = excluded.is_recently_added,
         download_permission = excluded.download_permission`
     ).run(
-      movie.id,
-      movie.title,
+      id,
+      title,
       movie.original_title || '',
       movie.synopsis || '',
       movie.genre || 'Action',
@@ -653,14 +650,14 @@ app.post('/api/movies', (req: Request, res: Response) => {
       subs,
       movie.rating || 0.0,
       movie.review_count || 0,
-      movie.is_active ? 1 : 0,
-      movie.is_featured ? 1 : 0,
-      movie.is_trending ? 1 : 0,
-      movie.is_recently_added ? 1 : 0,
+      movie.is_active !== false && movie.is_active !== 0 ? 1 : 0,
+      movie.is_featured !== false && movie.is_featured !== 0 ? 1 : 0,
+      movie.is_trending !== false && movie.is_trending !== 0 ? 1 : 0,
+      movie.is_recently_added !== false && movie.is_recently_added !== 0 ? 1 : 0,
       movie.download_permission || 'free'
     );
 
-    const saved = db.prepare('SELECT * FROM movies WHERE id = ?').get(movie.id);
+    const saved = db.prepare('SELECT * FROM movies WHERE id = ?').get(id);
     res.json(formatMovieRecord(saved));
   } catch (error) {
     console.error('Save movie error:', error);
