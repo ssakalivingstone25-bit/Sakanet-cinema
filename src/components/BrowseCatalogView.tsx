@@ -39,9 +39,20 @@ interface BrowseCatalogViewProps {
   onTabChange?: (tab: 'settings' | 'browse' | 'downloads' | 'admin') => void;
 }
 
+const DEFAULT_GENRE_POSTERS: Record<string, string> = {
+  Action: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=600&q=80',
+  'Sci-Fi': 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=600&q=80',
+  Adventure: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80',
+  Comedy: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=600&q=80',
+  Drama: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=600&q=80',
+  Thriller: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=600&q=80',
+  Horror: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80',
+  Animation: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=600&q=80',
+};
+
 const DEFAULT_VJ_AVATAR = '';
 
-export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
+export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
   movies,
   onSelectMovie,
   onPlayMovie,
@@ -58,6 +69,15 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
 }) => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = user?.email?.toLowerCase().trim() === 'ssakalivingstone25@gmail.com';
+
+  // Defer heavy rails rendering until tab transition finishes (guarantees silky smooth 60fps)
+  const [isHeavyContentReady, setIsHeavyContentReady] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsHeavyContentReady(true);
+    }, 50);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Filter state
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
@@ -97,7 +117,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
 
   // 1. Strictly published movies uploaded by the admin (is_active === true)
   const publishedMovies = useMemo(() => {
-    return movies.filter((m) => m.is_active !== false);
+    return movies.filter((m) => m.is_active !== false && m.is_active !== 0 && m.is_active !== '0');
   }, [movies]);
 
   // Personalized Recommendations based on Firestore watch history and genre preferences
@@ -671,12 +691,14 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 sm:gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
                   {filteredMovies.map((movie) => (
                     <MoviePosterCard
                       key={movie.id}
                       movie={movie}
                       onSelect={() => onSelectMovie(movie)}
+                      onPlay={() => onPlayMovie(movie)}
+                      onDownload={() => onDownloadMovie(movie)}
                     />
                   ))}
                 </div>
@@ -684,9 +706,30 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
             </section>
           ) : (
             <>
-              {/* ========================================================
-                  SECTION 4.5: RECOMMENDED FOR YOU (Firestore Watch History & Preferences)
-                 ======================================================== */}
+              {!isHeavyContentReady ? (
+                <div className="space-y-8 animate-in fade-in duration-150 py-2">
+                  <div className="space-y-3">
+                    <div className="h-5 w-44 bg-zinc-800/60 rounded-md animate-pulse" />
+                    <div className="flex gap-4 overflow-hidden">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="w-52 sm:w-60 aspect-[16/10] bg-[#0e0f15] border border-white/5 rounded-2xl animate-pulse shrink-0" />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="h-5 w-36 bg-zinc-800/60 rounded-md animate-pulse" />
+                    <div className="flex gap-4 overflow-hidden">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="w-52 sm:w-60 aspect-[16/10] bg-[#0e0f15] border border-white/5 rounded-2xl animate-pulse shrink-0" />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* ========================================================
+                      SECTION 4.5: RECOMMENDED FOR YOU (Firestore Watch History & Preferences)
+                     ======================================================== */}
               {recommendedList.length > 0 && (
                 <section className="mb-8">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5">
@@ -719,20 +762,25 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
                   </div>
 
                   {/* Horizontal Recommended Movies Rail with Match Badges and Reasons */}
-                  <div className="flex items-start gap-3.5 sm:gap-4 overflow-x-auto no-scrollbar pb-1">
+                  <div className="flex items-start gap-4 overflow-x-auto no-scrollbar pb-2">
                     {recommendedList.slice(0, 10).map(({ movie, matchPercentage, reason }) => (
-                      <div key={movie.id} className="shrink-0 w-36 sm:w-44 group">
+                      <div key={movie.id} className="shrink-0 w-52 sm:w-60 group">
                         <div className="relative">
-                          <MoviePosterCard movie={movie} onSelect={() => onSelectMovie(movie)} />
+                          <MoviePosterCard
+                            movie={movie}
+                            onSelect={() => onSelectMovie(movie)}
+                            onPlay={() => onPlayMovie(movie)}
+                            onDownload={() => onDownloadMovie(movie)}
+                          />
                           {/* Match Percentage Pill */}
-                          <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-md border border-red-500/40 text-[10px] font-mono font-black text-red-400 shadow-lg flex items-center gap-1">
+                          <div className="absolute top-4 left-4 z-10 px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-md border border-red-500/40 text-[10px] font-mono font-black text-red-400 shadow-lg flex items-center gap-1 pointer-events-none">
                             <Sparkles className="w-2.5 h-2.5 text-red-500" />
                             <span>{matchPercentage}% Match</span>
                           </div>
                         </div>
 
                         {/* Recommendation Reason Badge */}
-                        <div className="mt-1.5 px-2 py-1 rounded-lg bg-[#14151e] border border-white/5 text-[10px] text-zinc-300 font-medium truncate flex items-center gap-1.5 shadow-sm">
+                        <div className="mt-2 px-2.5 py-1 rounded-lg bg-[#14151e] border border-white/5 text-[10px] text-zinc-300 font-medium truncate flex items-center gap-1.5 shadow-sm">
                           <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
                           <span className="truncate">{reason.label}</span>
                         </div>
@@ -830,10 +878,15 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
                   </div>
 
                   {/* Horizontal Movie Rail */}
-                  <div className="flex items-start gap-3.5 sm:gap-4 overflow-x-auto no-scrollbar pb-1">
+                  <div className="flex items-start gap-4 overflow-x-auto no-scrollbar pb-2">
                     {trendingMovies.slice(0, 10).map((movie) => (
-                      <div key={movie.id} className="shrink-0 w-36 sm:w-44">
-                        <MoviePosterCard movie={movie} onSelect={() => onSelectMovie(movie)} />
+                      <div key={movie.id} className="shrink-0 w-52 sm:w-60">
+                        <MoviePosterCard
+                          movie={movie}
+                          onSelect={() => onSelectMovie(movie)}
+                          onPlay={() => onPlayMovie(movie)}
+                          onDownload={() => onDownloadMovie(movie)}
+                        />
                       </div>
                     ))}
                   </div>
@@ -861,10 +914,15 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
                   </div>
 
                   {/* Horizontal Movie Rail */}
-                  <div className="flex items-start gap-3.5 sm:gap-4 overflow-x-auto no-scrollbar pb-1">
+                  <div className="flex items-start gap-4 overflow-x-auto no-scrollbar pb-2">
                     {recentlyAddedMovies.slice(0, 10).map((movie) => (
-                      <div key={movie.id} className="shrink-0 w-36 sm:w-44">
-                        <MoviePosterCard movie={movie} onSelect={() => onSelectMovie(movie)} />
+                      <div key={movie.id} className="shrink-0 w-52 sm:w-60">
+                        <MoviePosterCard
+                          movie={movie}
+                          onSelect={() => onSelectMovie(movie)}
+                          onPlay={() => onPlayMovie(movie)}
+                          onDownload={() => onDownloadMovie(movie)}
+                        />
                       </div>
                     ))}
                   </div>
@@ -923,6 +981,8 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
           )}
         </>
       )}
+    </>
+  )}
 
       {/* ========================================================
           FULL VIEW MODAL ("See All" for VJs, Trending, or Recent)
@@ -997,7 +1057,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {(seeAllModal === 'trending' ? trendingMovies : recentlyAddedMovies).map(
                   (movie) => (
                     <MoviePosterCard
@@ -1007,6 +1067,11 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
                         setSeeAllModal(null);
                         onSelectMovie(movie);
                       }}
+                      onPlay={() => {
+                        setSeeAllModal(null);
+                        onPlayMovie(movie);
+                      }}
+                      onDownload={() => onDownloadMovie(movie)}
                     />
                   )
                 )}
@@ -1026,61 +1091,132 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = ({
       />
     </div>
   );
-};
+});
 
 // ========================================================
-// MOVIE POSTER CARD (Matches reference image portrait 2:3 style)
+// MOVIE POSTER CARD (Contained Cinema Master File Preview Style)
 // ========================================================
 interface MoviePosterCardProps {
   movie: Movie;
   onSelect: () => void;
+  onPlay?: () => void;
+  onDownload?: () => void;
 }
 
-const MoviePosterCard: React.FC<MoviePosterCardProps> = ({ movie, onSelect }) => {
+const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onSelect, onPlay, onDownload }) => {
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const posterSrc =
+    movie.banner_url ||
+    movie.thumbnail_url ||
+    movie.poster_url ||
+    DEFAULT_GENRE_POSTERS[movie.genre] ||
+    DEFAULT_GENRE_POSTERS['Action'];
+
   return (
-    <div onClick={onSelect} className="group flex flex-col cursor-pointer select-none">
-      <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-[#121319] border border-white/10 group-hover:border-[#F20D28]/60 shadow-lg group-hover:scale-[1.02] transition-all duration-300">
-        <img
-          src={movie.thumbnail_url}
-          alt={movie.title}
-          referrerPolicy="no-referrer"
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          loading="lazy"
-        />
-
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent" />
-
-        {/* Movie Title Banner on Poster Bottom */}
-        <div className="absolute bottom-2.5 left-2 right-2 text-center">
-          <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-white font-display drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] leading-tight block">
-            {movie.title}
-          </span>
-        </div>
-
-        {/* Rating Badge */}
-        {movie.rating && (
-          <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded text-[10px] text-amber-400 font-bold border border-white/10">
-            <Star className="w-2.5 h-2.5 fill-current" />
-            <span>{movie.rating.toFixed(1)}</span>
+    <div
+      onClick={onSelect}
+      className="group flex flex-col bg-[#0e0f15] border border-white/10 hover:border-[#E50914]/70 rounded-2xl overflow-hidden p-3 transition-all duration-300 shadow-xl hover:shadow-2xl hover:scale-[1.015] cursor-pointer text-left select-none will-change-transform"
+      style={{ transform: 'translate3d(0, 0, 0)' }}
+    >
+      {/* Contained Media Preview Frame (Fixed Aspect Ratio to Eliminate CLS) */}
+      <div className="relative aspect-[16/10] w-full rounded-xl overflow-hidden bg-[#14151e] border border-white/10 shrink-0">
+        {!imageLoaded && (
+          <div className="absolute inset-0 bg-zinc-900/80 animate-pulse flex items-center justify-center">
+            <Film className="w-6 h-6 text-zinc-700 animate-pulse" />
           </div>
         )}
+        <img
+          src={posterSrc}
+          alt={movie.title}
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          onLoad={() => setImageLoaded(true)}
+          className={`w-full h-full object-cover transition-all duration-300 ${
+            imageLoaded ? 'opacity-100 scale-100 group-hover:scale-105' : 'opacity-0 scale-95'
+          }`}
+          style={{ willChange: 'transform, opacity' }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+
+        {/* Play Overlay */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+          <button
+            type="button"
+            onClick={(e) => {
+              if (onPlay) {
+                e.stopPropagation();
+                onPlay();
+              }
+            }}
+            className="w-10 h-10 rounded-full bg-[#E50914] text-white flex items-center justify-center shadow-2xl hover:scale-110 transition-transform cursor-pointer"
+            title="Play Movie"
+          >
+            <Play className="w-5 h-5 fill-white ml-0.5" />
+          </button>
+        </div>
+
+        {/* Quality Tag */}
+        <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-sm border border-white/10 text-[9px] font-mono text-zinc-300 font-bold">
+          1080p FHD
+        </div>
+
+        {/* Size Tag */}
+        <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-sm border border-white/10 text-[9px] font-mono text-zinc-300">
+          {movie.file_size_mb ? `${movie.file_size_mb} MB` : 'Stream'}
+        </div>
       </div>
 
-      <div className="mt-2 text-left">
-        <h4 className="text-xs sm:text-sm font-semibold text-white truncate leading-tight group-hover:text-[#F20D28] transition-colors">
-          {movie.title}
-        </h4>
-        <div className="flex items-center justify-between text-[11px] text-zinc-400 font-medium mt-0.5">
-          <span>{movie.release_year}</span>
-          {movie.vj_name && (
-            <span className="text-red-400/90 font-semibold truncate max-w-[90px]">
-              {movie.vj_name}
+      {/* Card Info Details */}
+      <div className="pt-2.5 px-0.5 space-y-1 text-left flex-1 flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between text-[11px] text-zinc-400 font-medium">
+            <span className="text-[#E50914] font-bold truncate max-w-[120px]">
+              {movie.vj_name || 'VJ Junior'}
             </span>
-          )}
+            <span className="text-zinc-500 font-mono text-[10px]">{movie.release_year}</span>
+          </div>
+
+          <h4 className="text-xs sm:text-sm font-bold text-white truncate leading-snug group-hover:text-red-400 transition-colors mt-0.5 min-h-[18px]">
+            {movie.title}
+          </h4>
+        </div>
+
+        {/* Action Row */}
+        <div className="flex items-center justify-between pt-2 text-[11px] border-t border-white/5 mt-2">
+          <span className="text-zinc-500 font-mono text-[10px] truncate max-w-[80px]">{movie.genre}</span>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onDownload && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownload();
+                }}
+                className="p-1 rounded-lg bg-white/5 hover:bg-white/10 text-emerald-400 transition-colors cursor-pointer"
+                title="Download to Phone"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                if (onPlay) {
+                  e.stopPropagation();
+                  onPlay();
+                }
+              }}
+              className="px-2.5 py-1 rounded-lg bg-[#E50914] hover:bg-[#d60b23] text-white text-[11px] font-bold transition-transform active:scale-95 flex items-center gap-1 shadow cursor-pointer"
+            >
+              <Play className="w-3 h-3 fill-current" />
+              <span>Watch</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
-};
+});
 
 export default BrowseCatalogView;

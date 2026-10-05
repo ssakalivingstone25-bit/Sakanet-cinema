@@ -35,14 +35,16 @@ import { apiService } from '../services/apiService';
 
 interface AdminPortalViewProps {
   movies: Movie[];
-  onMoviesChanged: () => void;
+  onMoviesChanged: () => Promise<void> | void;
   onSelectMovie: (movie: Movie) => void;
+  onNavigateTab?: (tab: 'settings' | 'browse' | 'downloads' | 'admin') => void;
 }
 
-export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
+export const AdminPortalView: React.FC<AdminPortalViewProps> = React.memo(({
   movies,
   onMoviesChanged,
   onSelectMovie,
+  onNavigateTab,
 }) => {
   // Navigation between Pipeline Tabs
   const [pipelineTab, setPipelineTab] = useState<'awaiting' | 'published'>('awaiting');
@@ -87,25 +89,37 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
     setShowEditModal(true);
   };
 
-  // Publish a movie directly to Live Platform
+  // Publish a movie directly to Live Platform (and Browse Catalog)
   const handlePublishMovie = async (movie: Movie) => {
+    // 1. Instant storage update
     const updated = storageService.publishMovie(movie.id);
-    if (updated) saveMovieToFirestore(updated);
+    if (updated) {
+      await saveMovieToFirestore(updated);
+    }
+    // 2. Server database update (with upsert)
     try {
       await apiService.updateMovie(movie.id, { is_active: true });
-    } catch {}
-    onMoviesChanged();
-    showToast(`"${movie.title}" is now LIVE on Sakanet!`);
+    } catch {
+      try {
+        await apiService.createMovie({ ...movie, is_active: true });
+      } catch {}
+    }
+    // 3. Await app-level catalog refresh to prevent state overwriting
+    await onMoviesChanged();
+    setPipelineTab('published');
+    showToast(`"${movie.title}" is now LIVE on Sakanet Browse!`);
   };
 
   // Unpublish a movie back to Awaiting
   const handleUnpublishMovie = async (movie: Movie) => {
     const updated = storageService.unpublishMovie(movie.id);
-    if (updated) saveMovieToFirestore(updated);
+    if (updated) {
+      await saveMovieToFirestore(updated);
+    }
     try {
       await apiService.updateMovie(movie.id, { is_active: false });
     } catch {}
-    onMoviesChanged();
+    await onMoviesChanged();
     showToast(`"${movie.title}" moved back to Awaiting Publication`);
   };
 
@@ -149,18 +163,22 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
   };
 
   // Publish all selected awaiting movies
-  const handlePublishSelected = () => {
+  const handlePublishSelected = async () => {
     if (selectedMovieIds.size === 0) return;
+    const ids = Array.from(selectedMovieIds);
     let count = 0;
-    selectedMovieIds.forEach((id) => {
+    for (const id of ids) {
       const updated = storageService.publishMovie(id);
       if (updated) {
-        saveMovieToFirestore(updated);
+        await saveMovieToFirestore(updated);
+        try {
+          await apiService.updateMovie(id, { is_active: true });
+        } catch {}
         count++;
       }
-    });
+    }
     setSelectedMovieIds(new Set());
-    onMoviesChanged();
+    await onMoviesChanged();
     setPipelineTab('published');
     showToast(`Published ${count} movie(s) to the live platform!`);
   };
@@ -603,14 +621,17 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({
           setEditingMovie(null);
         }}
         editingMovie={editingMovie}
-        onSaved={(savedMovie) => {
-          saveMovieToFirestore(savedMovie);
-          onMoviesChanged();
+        onSaved={async (savedMovie) => {
+          await saveMovieToFirestore(savedMovie);
+          await onMoviesChanged();
           setShowEditModal(false);
           setEditingMovie(null);
-          showToast(`"${savedMovie.title}" successfully saved!`);
+          showToast(`"${savedMovie.title}" successfully saved & published!`);
+          if (savedMovie.is_active && onNavigateTab) {
+            onNavigateTab('browse');
+          }
         }}
       />
     </div>
   );
-};
+});

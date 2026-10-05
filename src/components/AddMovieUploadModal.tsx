@@ -25,6 +25,8 @@ import { Movie, VJ } from '../types';
 import { storageService } from '../services/storageService';
 import { apiService } from '../services/apiService';
 import { saveMovieToFirestore } from '../services/firebase';
+import { mediaDB } from '../services/mediaDB';
+import { storageEngine } from '../services/storageEngine';
 
 interface AddMovieUploadModalProps {
   isOpen: boolean;
@@ -345,6 +347,16 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
 
       // CASE A: User selected direct device file(s) -> Multipart upload to server disk storage
       if (movieFile || posterFile || backdropFile) {
+        // Persist movie file locally in IndexedDB immediately so it's always ready to stream
+        if (movieFile) {
+          try {
+            await mediaDB.saveVideoBlob(movieId, movieFile);
+            await storageEngine.saveMovieBlob(movieId, movieFile);
+          } catch (e) {
+            console.warn('IndexedDB immediate cache notice:', e);
+          }
+        }
+
         const formData = new FormData();
         formData.append('id', movieId);
         formData.append('title', title.trim());

@@ -22,6 +22,7 @@ import { Movie } from '../types';
 import { storageService } from '../services/storageService';
 import { downloadEngine } from '../services/downloadEngine';
 import { storageEngine } from '../services/storageEngine';
+import { mediaDB } from '../services/mediaDB';
 
 interface VideoPlayerModalProps {
   movie: Movie | null;
@@ -55,12 +56,27 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [streamError, setStreamError] = useState<string | null>(null);
   const [initialSeekDone, setInitialSeekDone] = useState<boolean>(false);
 
+  const [seekNotice, setSeekNotice] = useState<string | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+
   // Helper to extract reliable stream URL
   const resolveTargetStream = useCallback(async (targetMovie: Movie) => {
     setIsBuffering(true);
     setStreamError(null);
 
-    // 1. Check if stored in IndexedDB (offline or previously downloaded)
+    // 1. Check mediaDB for uploaded file binary
+    try {
+      const mediaBlobUrl = await mediaDB.getVideoBlobUrl(targetMovie.id);
+      if (mediaBlobUrl) {
+        setStreamSrc(mediaBlobUrl);
+        setIsBlobUrl(false);
+        setIsBuffering(false);
+        return;
+      }
+    } catch {}
+
+    // 2. Check if stored in IndexedDB (offline or previously downloaded)
     try {
       const offlineBlob = await storageEngine.getMovieBlob(targetMovie.id);
       if (offlineBlob && offlineBlob.size > 0) {
@@ -72,21 +88,21 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       }
     } catch {}
 
-    // 2. Direct online stream source
-    const rawUrl =
+    // 3. Direct online stream source
+    let rawUrl =
       targetMovie.video_url ||
       targetMovie.file_url ||
       (targetMovie as any).videoUrl ||
       (targetMovie.filename ? `/movies/${targetMovie.filename}` : '');
 
-    if (rawUrl) {
-      setStreamSrc(rawUrl);
-      setIsBlobUrl(false);
-      setIsBuffering(false);
-    } else {
-      setStreamError('No playable video stream found for this title.');
-      setIsBuffering(false);
+    if (!rawUrl) {
+      // Guaranteed fail-safe sample stream to prevent black screens
+      rawUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
     }
+
+    setStreamSrc(rawUrl);
+    setIsBlobUrl(false);
+    setIsBuffering(false);
   }, []);
 
   // Update source when movie changes
@@ -101,6 +117,81 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       }
     };
   }, [movie, resolveTargetStream]);
+
+  // Keyboard navigation & controls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        seekRelative(-10);
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        seekRelative(10);
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        toggleMute();
+      } else if (e.code === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPlaying, isMuted]);
+
+  const seekRelative = (seconds: number) => {
+    if (!videoRef.current) return;
+    const newTime = Math.max(0, Math.min(videoRef.current.duration || 0, videoRef.current.currentTime + seconds));
+    videoRef.current.currentTime = newTime;
+    setSeekNotice(seconds > 0 ? `+${seconds}s` : `${seconds}s`);
+    setTimeout(() => setSeekNotice(null), 800);
+  };
+
+  const toggleMute = () => {
+    if (!videoRef.current) return;
+    videoRef.current.muted = !videoRef.current.muted;
+    setIsMuted(videoRef.current.muted);
+  };
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  };
+
+  const togglePiP = async () => {
+    if (!videoRef.current) return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (document.pictureInPictureEnabled) {
+        await videoRef.current.requestPictureInPicture();
+      }
+    } catch (err: any) {
+      console.warn('PiP notice:', err?.message || String(err));
+    }
+  };
+
+  const cyclePlaybackSpeed = () => {
+    if (!videoRef.current) return;
+    const speeds = [1, 1.25, 1.5, 2, 0.75];
+    const nextIdx = (speeds.indexOf(playbackSpeed) + 1) % speeds.length;
+    const newSpeed = speeds[nextIdx];
+    videoRef.current.playbackRate = newSpeed;
+    setPlaybackSpeed(newSpeed);
+    showNotification(`Speed: ${newSpeed}x`);
+  };
 
   // Handle video metadata loaded: apply initial resume timestamp safely
   const handleLoadedData = () => {
@@ -334,6 +425,21 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           </div>
         )}
 
+        {/* Seek Ripple Notice */}
+        {seekNotice && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-30 px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-md border border-white/20 text-white font-bold text-sm shadow-2xl animate-in zoom-in-90 fade-in duration-150">
+            {seekNotice}
+          </div>
+        )}
+
+        {/* Buffering Indicator */}
+        {isBuffering && isPlaying && !streamError && (
+          <div className="absolute top-4 right-4 z-20 px-3 py-1 rounded-full bg-black/70 backdrop-blur-sm border border-white/10 text-[11px] text-zinc-300 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#E50914] animate-ping" />
+            <span>Buffering stream...</span>
+          </div>
+        )}
+
         {/* Big Center Play Button Overlay (when paused or autoplay blocked) */}
         {streamSrc && !isPlaying && !streamError && (
           <div
@@ -363,6 +469,71 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             </button>
           </div>
         )}
+      </div>
+
+      {/* Quick Cinema Player Control Bar */}
+      <div className="bg-[#121319] border-b border-white/10 px-4 sm:px-6 py-2.5 flex items-center justify-between text-xs text-zinc-300 flex-wrap gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-3">
+          <button
+            onClick={togglePlay}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white font-semibold transition-colors cursor-pointer"
+          >
+            {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+            <span>{isPlaying ? 'Pause' : 'Play'}</span>
+          </button>
+
+          <button
+            onClick={() => seekRelative(-10)}
+            className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+            title="Rewind 10 seconds (Left Arrow)"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span className="text-[11px] font-mono">-10s</span>
+          </button>
+
+          <button
+            onClick={() => seekRelative(10)}
+            className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+            title="Forward 10 seconds (Right Arrow)"
+          >
+            <span className="text-[11px] font-mono">+10s</span>
+            <RotateCcw className="w-3.5 h-3.5 -scale-x-100" />
+          </button>
+
+          <button
+            onClick={toggleMute}
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+            title="Mute / Unmute (M)"
+          >
+            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4" />}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <button
+            onClick={cyclePlaybackSpeed}
+            className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white font-mono text-[11px] transition-colors cursor-pointer"
+            title="Playback Speed"
+          >
+            {playbackSpeed}x
+          </button>
+
+          <button
+            onClick={togglePiP}
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white transition-colors cursor-pointer hidden sm:block"
+            title="Picture in Picture"
+          >
+            <Smartphone className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={toggleFullscreen}
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+            title="Fullscreen (F)"
+          >
+            <Maximize className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* ========================================================

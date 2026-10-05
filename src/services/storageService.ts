@@ -32,8 +32,27 @@ export const storageService = {
       if (!data) return [];
       const parsed = JSON.parse(data);
       if (!Array.isArray(parsed)) return [];
-      // Clean, validate real movies with valid video_url or file_url and title
-      return parsed.filter((m: Movie) => m && m.id && m.title && (m.video_url || m.file_url));
+      // Clean, validate real movies with valid identifiers and provide safe fallbacks
+      return parsed
+        .filter((m: any) => m && m.id && m.title)
+        .map((m: any) => {
+          const video = m.video_url || m.file_url || m.videoUrl || (m.filename ? `/movies/${m.filename}` : '');
+          const poster =
+            m.poster_url ||
+            m.thumbnail_url ||
+            m.banner_url ||
+            'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=600&q=80';
+          return {
+            ...m,
+            video_url: video,
+            file_url: video,
+            videoUrl: video,
+            poster_url: poster,
+            thumbnail_url: poster,
+            banner_url: m.banner_url || poster,
+            is_active: m.is_active !== false && m.is_active !== 0,
+          };
+        });
     } catch {
       return [];
     }
