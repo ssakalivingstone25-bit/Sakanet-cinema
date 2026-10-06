@@ -29,7 +29,7 @@ interface NavbarProps {
   onOpenAuth: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({
+export const Navbar: React.FC<NavbarProps> = React.memo(({
   activeTab,
   onTabChange,
   isAndroidView,
@@ -221,4 +221,4 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
     </header>
   );
-};
+});

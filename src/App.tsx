@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Movie, DownloadItem, UserProfile, WatchProgress } from './types';
 import { storageService, guestUser } from './services/storageService';
@@ -25,6 +25,7 @@ import {
   syncUserProfileFromFirebaseUser,
   checkRedirectResult,
   subscribeToFirestoreMovies,
+  saveMovieToFirestore,
 } from './services/firebase';
 import { apiService } from './services/apiService';
 import {
@@ -37,6 +38,37 @@ import {
   AlertCircle,
   ShieldAlert,
 } from 'lucide-react';
+
+/**
+ * Resilient helper to merge movie catalogs across SQLite, LocalStorage and Cloud Firestore
+ * Prevents cloud sync or local refresh from destroying or overwriting movie items.
+ */
+function mergeMovieList(base: Movie[], incoming: Movie[]): Movie[] {
+  const map = new Map<string, Movie>();
+  (base || []).forEach((m) => {
+    if (m && m.id) map.set(m.id, m);
+  });
+  (incoming || []).forEach((m) => {
+    if (!m || !m.id) return;
+    const prev = map.get(m.id);
+    if (!prev) {
+      map.set(m.id, m);
+    } else {
+      map.set(m.id, {
+        ...prev,
+        ...m,
+        video_url: m.video_url || prev.video_url,
+        file_url: m.file_url || m.video_url || prev.file_url,
+        videoUrl: m.videoUrl || m.video_url || prev.videoUrl,
+        poster_url: m.poster_url || prev.poster_url,
+        banner_url: m.banner_url || prev.banner_url,
+        thumbnail_url: m.thumbnail_url || prev.thumbnail_url,
+        is_active: m.is_active !== undefined ? m.is_active : prev.is_active,
+      });
+    }
+  });
+  return Array.from(map.values());
+}
 
 export default function App() {
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -123,9 +155,12 @@ export default function App() {
     });
 
     const unsubscribeFirestore = subscribeToFirestoreMovies((cloudMovies) => {
-      if (cloudMovies && cloudMovies.length > 0) {
-        storageService.saveMovies(cloudMovies);
-        setMovies(cloudMovies);
+      if (cloudMovies && Array.isArray(cloudMovies) && cloudMovies.length > 0) {
+        setMovies((prev) => {
+          const merged = mergeMovieList(prev, cloudMovies);
+          storageService.saveMovies(merged);
+          return merged;
+        });
       }
     });
 
@@ -136,48 +171,61 @@ export default function App() {
     };
   }, []);
 
-  const refreshCatalog = async () => {
+  const refreshCatalog = useCallback(async () => {
     // 1. Instant local render
     const allMovies = storageService.getMovies();
-    setMovies(allMovies);
+    setMovies((prev) => mergeMovieList(prev, allMovies));
     setUser(storageService.getUser());
     refreshWatchProgress();
 
-    // 2. Fetch persistent SQLite database from server
+    // 2. Fetch persistent SQLite database from server and merge
     try {
       const serverMovies = await apiService.getMovies();
-      if (Array.isArray(serverMovies)) {
-        storageService.saveMovies(serverMovies);
-        setMovies(serverMovies);
+      if (Array.isArray(serverMovies) && serverMovies.length > 0) {
+        setMovies((prev) => {
+          const merged = mergeMovieList(prev, serverMovies);
+          storageService.saveMovies(merged);
+          return merged;
+        });
       }
     } catch (err) {
       console.warn('Server movies sync notice:', err);
     }
+
+    // 3. Keep Firestore synchronized with all active movies
+    try {
+      const current = storageService.getMovies();
+      current.forEach((m) => {
+        if (m && m.is_active) {
+          saveMovieToFirestore(m).catch(() => {});
+        }
+      });
+    } catch {}
 
     // If an open movie was deleted, close players/modals
     const currentList = storageService.getMovies();
     setSelectedMovie((prev) => (prev && !currentList.some((m) => m.id === prev.id) ? null : prev));
     setPlayingMovie((prev) => (prev && !currentList.some((m) => m.id === prev.id) ? null : prev));
     setMiniPlayer((prev) => (prev && !currentList.some((m) => m.id === prev.movie.id) ? null : prev));
-  };
+  }, []);
 
-  const refreshWatchProgress = () => {
+  const refreshWatchProgress = useCallback(() => {
     const list = storageService.getContinueWatchingList();
     setContinueWatchingList(list);
-  };
+  }, []);
 
-  const handleToggleOfflineMode = (offline: boolean) => {
+  const handleToggleOfflineMode = useCallback((offline: boolean) => {
     storageService.setOfflineMode(offline);
     setIsOfflineMode(offline);
-  };
+  }, []);
 
-  const handleToggleWatchlist = (movieId: string) => {
+  const handleToggleWatchlist = useCallback((movieId: string) => {
     storageService.toggleWatchlist(movieId);
     setUser(storageService.getUser());
-  };
+  }, []);
 
   // Launch video player (with optional resume timestamp)
-  const handlePlayMovie = (movie: Movie, startTime: number = 0, offline: boolean = false) => {
+  const handlePlayMovie = useCallback((movie: Movie, startTime: number = 0, offline: boolean = false) => {
     // If mini player was playing, close it
     setMiniPlayer(null);
     storageService.incrementViewCount(movie.id);
@@ -193,34 +241,51 @@ export default function App() {
       startTime,
       (movie.duration_minutes || 120) * 60
     );
-  };
+  }, [user.id, refreshCatalog]);
 
-  const handleDownloadMovie = (movie: Movie) => {
+  const handleDownloadMovie = useCallback((movie: Movie) => {
     storageService.incrementDownloadCount(movie.id);
     downloadEngine.triggerDownload(movie);
     refreshCatalog();
-  };
+  }, [refreshCatalog]);
 
   // Enter Picture-in-Picture mode
-  const handleEnterMiniPlayer = (movie: Movie, currentTime: number, isPlaying: boolean) => {
+  const handleEnterMiniPlayer = useCallback((movie: Movie, currentTime: number, isPlaying: boolean) => {
     setPlayingMovie(null);
     setMiniPlayer({ movie, currentTime, isPlaying });
     refreshWatchProgress();
-  };
+  }, [refreshWatchProgress]);
 
   // Expand MiniPlayer back to Full Player Modal
-  const handleExpandMiniPlayer = (currentTime: number) => {
+  const handleExpandMiniPlayer = useCallback((currentTime: number) => {
     if (!miniPlayer) return;
     const movie = miniPlayer.movie;
     setMiniPlayer(null);
     handlePlayMovie(movie, currentTime, false);
-  };
+  }, [miniPlayer, handlePlayMovie]);
 
   // Remove progress from Continue Watching
-  const handleRemoveWatchProgress = (movieId: string) => {
+  const handleRemoveWatchProgress = useCallback((movieId: string) => {
     storageService.clearWatchProgress(movieId);
     refreshWatchProgress();
-  };
+  }, [refreshWatchProgress]);
+
+  const handleSelectMovie = useCallback((movie: Movie | null) => {
+    setSelectedMovie(movie);
+  }, []);
+
+  const handleOpenAuth = useCallback(() => {
+    setShowAuthModal(true);
+  }, []);
+
+  const handleTabChange = useCallback((tab: 'settings' | 'browse' | 'downloads' | 'admin') => {
+    setActiveTab(tab);
+  }, []);
+
+  const handleSearchChange = useCallback((q: string) => {
+    setSearchTerm(q);
+    setActiveTab((curr) => (curr !== 'browse' ? 'browse' : curr));
+  }, []);
 
   // Movies visible in live application feed
   const liveFeedMovies = movies.filter((m) => m.is_active);
@@ -283,7 +348,7 @@ export default function App() {
       {/* Top Bar for Desktop and Mobile */}
       <Navbar
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         isAndroidView={false}
         onToggleAndroidView={() => {}}
         isOfflineMode={false}
@@ -291,162 +356,139 @@ export default function App() {
         user={user}
         downloads={downloads}
         searchTerm={searchTerm}
-        onSearchChange={(q) => {
-          setSearchTerm(q);
-          if (activeTab !== 'browse') setActiveTab('browse');
-        }}
-        onOpenAuth={() => setShowAuthModal(true)}
+        onSearchChange={handleSearchChange}
+        onOpenAuth={handleOpenAuth}
       />
 
       {/* Main Content Area with bottom navigation clearance */}
       <div className="flex-1 w-full pb-20">
         <AndroidAppFrame>
-          {/* FADE-IN TAB TRANSITIONS VIA FRAMER MOTION */}
-          <AnimatePresence mode="wait">
-            {activeTab === 'settings' && (
-              <motion.div
-                key="settings"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.22, ease: 'easeOut' }}
-              >
-                <SettingsView
-                  user={user}
-                  downloads={downloads}
-                  isOfflineMode={isOfflineMode}
-                  onToggleOfflineMode={handleToggleOfflineMode}
-                  onOpenAuth={() => setShowAuthModal(true)}
-                  onUserUpdated={() => refreshCatalog()}
-                />
-              </motion.div>
-            )}
+          {/* GPU-ACCELERATED PRESERVED TAB PANELS (Zero unmounting, zero rebuild lag, smooth 60fps transitions) */}
+          <div className="relative w-full min-h-[70vh]">
+            {/* 1. BROWSE & SEARCH TAB (Default Home Tab) */}
+            <div
+              role="tabpanel"
+              aria-hidden={activeTab !== 'browse'}
+              className={`w-full transition-opacity duration-200 ease-out will-change-transform ${
+                activeTab === 'browse' ? 'block opacity-100' : 'hidden opacity-0 pointer-events-none'
+              }`}
+              style={{ transform: 'translate3d(0, 0, 0)' }}
+            >
+              <BrowseCatalogView
+                movies={movies}
+                onSelectMovie={handleSelectMovie}
+                onPlayMovie={handlePlayMovie}
+                onDownloadMovie={handleDownloadMovie}
+                onToggleWatchlist={handleToggleWatchlist}
+                watchlist={user.watchlist}
+                downloads={downloads}
+                searchTerm={searchTerm}
+                onSearchChange={handleSearchChange}
+                user={user}
+                onOpenAuth={handleOpenAuth}
+                continueWatchingList={continueWatchingList}
+                onTabChange={handleTabChange}
+              />
+            </div>
 
-            {/* BROWSE & SEARCH TAB (Default Home Tab) */}
-            {activeTab === 'browse' && (
-              <motion.div
-                key="browse"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.22, ease: 'easeOut' }}
-              >
-                <BrowseCatalogView
+            {/* 2. DOWNLOADS TAB */}
+            <div
+              role="tabpanel"
+              aria-hidden={activeTab !== 'downloads'}
+              className={`w-full transition-opacity duration-200 ease-out will-change-transform ${
+                activeTab === 'downloads' ? 'block opacity-100' : 'hidden opacity-0 pointer-events-none'
+              }`}
+              style={{ transform: 'translate3d(0, 0, 0)' }}
+            >
+              <OfflineDownloadsView
+                downloads={downloads}
+                movies={movies}
+                user={user}
+                isOfflineMode={isOfflineMode}
+                onToggleOfflineMode={handleToggleOfflineMode}
+                onPlayMovie={(m, isOffline) => handlePlayMovie(m, 0, isOffline)}
+                onSelectMovie={handleSelectMovie}
+              />
+            </div>
+
+            {/* 3. ADMIN PORTAL TAB */}
+            <div
+              role="tabpanel"
+              aria-hidden={activeTab !== 'admin'}
+              className={`w-full transition-opacity duration-200 ease-out will-change-transform ${
+                activeTab === 'admin' ? 'block opacity-100' : 'hidden opacity-0 pointer-events-none'
+              }`}
+              style={{ transform: 'translate3d(0, 0, 0)' }}
+            >
+              {user.email?.toLowerCase().trim() === 'ssakalivingstone25@gmail.com' ? (
+                <AdminPortalView
                   movies={movies}
-                  onSelectMovie={(m) => setSelectedMovie(m)}
-                  onPlayMovie={(m) => handlePlayMovie(m, 0, false)}
-                  onDownloadMovie={handleDownloadMovie}
-                  onToggleWatchlist={handleToggleWatchlist}
-                  watchlist={user.watchlist}
-                  downloads={downloads}
-                  searchTerm={searchTerm}
-                  onSearchChange={setSearchTerm}
-                  user={user}
-                  onOpenAuth={() => setShowAuthModal(true)}
-                  continueWatchingList={continueWatchingList}
-                  onTabChange={setActiveTab}
+                  onMoviesChanged={refreshCatalog}
+                  onSelectMovie={handleSelectMovie}
+                  onNavigateTab={handleTabChange}
                 />
-              </motion.div>
-            )}
-
-            {/* DOWNLOADS TAB */}
-            {activeTab === 'downloads' && (
-              <motion.div
-                key="downloads"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.22, ease: 'easeOut' }}
-              >
-                <OfflineDownloadsView
-                  downloads={downloads}
-                  movies={movies}
-                  user={user}
-                  isOfflineMode={isOfflineMode}
-                  onToggleOfflineMode={handleToggleOfflineMode}
-                  onPlayMovie={(m, isOffline) => handlePlayMovie(m, 0, isOffline)}
-                  onSelectMovie={(m) => setSelectedMovie(m)}
-                />
-              </motion.div>
-            )}
-
-            {/* ADMIN PORTAL TAB */}
-            {activeTab === 'admin' && (
-              <motion.div
-                key="admin"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.22, ease: 'easeOut' }}
-              >
-                {user.email?.toLowerCase().trim() === 'ssakalivingstone25@gmail.com' ? (
-                  <AdminPortalView
-                    movies={movies}
-                    onMoviesChanged={refreshCatalog}
-                    onSelectMovie={(m) => setSelectedMovie(m)}
-                  />
-                ) : (
-                  <div className="max-w-xl mx-auto my-16 p-8 bg-[#121216] border border-red-500/30 rounded-2xl text-center space-y-4 shadow-2xl">
-                    <div className="w-14 h-14 rounded-2xl bg-red-950/60 border border-red-800/40 flex items-center justify-center text-red-500 mx-auto">
-                      <ShieldAlert className="w-7 h-7" />
-                    </div>
-                    <h3 className="text-xl font-bold font-display text-white">
-                      Admin Control Section Restricted
-                    </h3>
-                    <p className="text-xs text-zinc-400 leading-relaxed max-w-md mx-auto">
-                      Access to the Admin Control section is strictly reserved for authorized platform administrators.
-                      {user.email
-                        ? ` Your current account does not have administrator privileges.`
-                        : ' Please sign in with an authorized administrator account to enter.'}
-                    </p>
-                    <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-                      <button
-                        onClick={() => setShowAuthModal(true)}
-                        className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs px-6 py-2.5 rounded-xl shadow-lg shadow-red-700/30 transition-all hover:scale-105 cursor-pointer"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24">
-                          <path
-                            fill="#FFFFFF"
-                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                          />
-                          <path
-                            fill="#FFFFFF"
-                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                          />
-                          <path
-                            fill="#FFFFFF"
-                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                          />
-                          <path
-                            fill="#FFFFFF"
-                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                          />
-                        </svg>
-                        <span>{user.email ? 'Switch to Administrator Account' : 'Sign In with Google'}</span>
-                      </button>
-                      <button
-                        onClick={() => setActiveTab('browse')}
-                        className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold cursor-pointer"
-                      >
-                        Return to Browse Catalog
-                      </button>
-                    </div>
+              ) : (
+                <div className="max-w-xl mx-auto my-16 p-8 bg-[#121216] border border-red-500/30 rounded-2xl text-center space-y-4 shadow-2xl">
+                  <div className="w-14 h-14 rounded-2xl bg-red-950/60 border border-red-800/40 flex items-center justify-center text-red-500 mx-auto">
+                    <ShieldAlert className="w-7 h-7" />
                   </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  <h3 className="text-xl font-bold font-display text-white">
+                    Admin Control Section Restricted
+                  </h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed max-w-md mx-auto">
+                    Access to the Admin Control section is strictly reserved for authorized platform administrators.
+                    {user.email
+                      ? ` Your current account does not have administrator privileges.`
+                      : ' Please sign in with an authorized administrator account to enter.'}
+                  </p>
+                  <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <button
+                      onClick={handleOpenAuth}
+                      className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs px-6 py-2.5 rounded-xl shadow-lg shadow-red-700/30 transition-all hover:scale-105 cursor-pointer"
+                    >
+                      <span>{user.email ? 'Switch to Administrator Account' : 'Sign In with Google'}</span>
+                    </button>
+                    <button
+                      onClick={() => handleTabChange('browse')}
+                      className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold cursor-pointer"
+                    >
+                      Return to Browse Catalog
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 4. SETTINGS TAB */}
+            <div
+              role="tabpanel"
+              aria-hidden={activeTab !== 'settings'}
+              className={`w-full transition-opacity duration-200 ease-out will-change-transform ${
+                activeTab === 'settings' ? 'block opacity-100' : 'hidden opacity-0 pointer-events-none'
+              }`}
+              style={{ transform: 'translate3d(0, 0, 0)' }}
+            >
+              <SettingsView
+                user={user}
+                downloads={downloads}
+                isOfflineMode={isOfflineMode}
+                onToggleOfflineMode={handleToggleOfflineMode}
+                onOpenAuth={handleOpenAuth}
+                onUserUpdated={refreshCatalog}
+              />
+            </div>
+          </div>
         </AndroidAppFrame>
       </div>
 
       {/* Global Bottom Navigation Bar (Browse, Downloads, Settings, Admin Portal) */}
       <BottomNavBar
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         downloadsCount={downloads.length}
         activeDownloadsCount={activeDownloadsCount}
         user={user}
-        onOpenAuth={() => setShowAuthModal(true)}
+        onOpenAuth={handleOpenAuth}
       />
 
       {/* Movie Details Modal (Framer Motion AnimatePresence Animated Entry & Exit) */}

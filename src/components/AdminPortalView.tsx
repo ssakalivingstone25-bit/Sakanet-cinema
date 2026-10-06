@@ -91,20 +91,35 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = React.memo(({
 
   // Publish a movie directly to Live Platform (and Browse Catalog)
   const handlePublishMovie = async (movie: Movie) => {
-    // 1. Instant storage update
-    const updated = storageService.publishMovie(movie.id);
-    if (updated) {
-      await saveMovieToFirestore(updated);
+    const publishedMovie: Movie = {
+      ...movie,
+      is_active: true,
+    };
+
+    // 1. Instant storage & cache update
+    storageService.updateMovie(movie.id, { is_active: true });
+    const localList = storageService.getMovies();
+    if (!localList.some((m) => m.id === movie.id)) {
+      storageService.saveMovies([publishedMovie, ...localList]);
     }
-    // 2. Server database update (with upsert)
+
+    // 2. Cloud Firestore sync
+    try {
+      await saveMovieToFirestore(publishedMovie);
+    } catch (fsErr) {
+      console.warn('Firestore publish sync notice:', fsErr);
+    }
+
+    // 3. Server database update (with upsert)
     try {
       await apiService.updateMovie(movie.id, { is_active: true });
     } catch {
       try {
-        await apiService.createMovie({ ...movie, is_active: true });
+        await apiService.createMovie(publishedMovie);
       } catch {}
     }
-    // 3. Await app-level catalog refresh to prevent state overwriting
+
+    // 4. Await app-level catalog refresh to propagate state everywhere
     await onMoviesChanged();
     setPipelineTab('published');
     showToast(`"${movie.title}" is now LIVE on Sakanet Browse!`);
@@ -112,13 +127,20 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = React.memo(({
 
   // Unpublish a movie back to Awaiting
   const handleUnpublishMovie = async (movie: Movie) => {
-    const updated = storageService.unpublishMovie(movie.id);
-    if (updated) {
-      await saveMovieToFirestore(updated);
-    }
+    const unpublishedMovie: Movie = {
+      ...movie,
+      is_active: false,
+    };
+
+    storageService.updateMovie(movie.id, { is_active: false });
+    try {
+      await saveMovieToFirestore(unpublishedMovie);
+    } catch {}
+
     try {
       await apiService.updateMovie(movie.id, { is_active: false });
     } catch {}
+
     await onMoviesChanged();
     showToast(`"${movie.title}" moved back to Awaiting Publication`);
   };
@@ -168,14 +190,19 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = React.memo(({
     const ids = Array.from(selectedMovieIds);
     let count = 0;
     for (const id of ids) {
-      const updated = storageService.publishMovie(id);
-      if (updated) {
-        await saveMovieToFirestore(updated);
-        try {
-          await apiService.updateMovie(id, { is_active: true });
-        } catch {}
-        count++;
-      }
+      const target = movies.find((m) => m.id === id);
+      const publishedMovie: Movie = target
+        ? { ...target, is_active: true }
+        : ({ id, is_active: true } as any);
+
+      storageService.updateMovie(id, { is_active: true });
+      try {
+        await saveMovieToFirestore(publishedMovie);
+      } catch {}
+      try {
+        await apiService.updateMovie(id, { is_active: true });
+      } catch {}
+      count++;
     }
     setSelectedMovieIds(new Set());
     await onMoviesChanged();

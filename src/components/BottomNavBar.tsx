@@ -11,7 +11,7 @@ interface BottomNavBarProps {
   onOpenAuth: () => void;
 }
 
-export const BottomNavBar: React.FC<BottomNavBarProps> = ({
+export const BottomNavBar: React.FC<BottomNavBarProps> = React.memo(({
   activeTab,
   onTabChange,
   downloadsCount,
@@ -132,6 +132,6 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
       </div>
     </nav>
   );
-};
+});
 
 export default BottomNavBar;

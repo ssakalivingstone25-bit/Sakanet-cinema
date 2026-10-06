@@ -449,6 +449,15 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         }
       }
 
+      // Ensure saved movie object is strictly marked with the active publication status and artwork
+      savedMovie = {
+        ...savedMovie,
+        is_active: isLive,
+        poster_url: savedMovie.poster_url || effectivePoster,
+        thumbnail_url: savedMovie.thumbnail_url || effectivePoster,
+        banner_url: savedMovie.banner_url || (backdropUrl || effectivePoster).trim(),
+      };
+
       // Persist in local storage cache
       const currentList = storageService.getMovies();
       const existingIdx = currentList.findIndex((m) => m.id === savedMovie.id);
@@ -463,6 +472,15 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         await saveMovieToFirestore(savedMovie);
       } catch (firestoreErr) {
         console.warn('Firestore cloud sync notice (local copy saved):', firestoreErr);
+      }
+
+      // Sync into server SQLite backend
+      try {
+        await apiService.updateMovie(savedMovie.id, { is_active: isLive });
+      } catch {
+        try {
+          await apiService.createMovie(savedMovie);
+        } catch {}
       }
 
       onSaved(savedMovie);
@@ -828,6 +846,20 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
                       onChange={(e) => setVideoUrl(e.target.value)}
                       className="w-full bg-[#0a0b10] border border-white/15 focus:border-[#E50914] rounded-xl px-3.5 py-2.5 text-white text-xs font-mono focus:outline-none"
                     />
+
+                    {/* Stream URL Video Preview */}
+                    {videoUrl.trim() && (
+                      <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-black border border-white/10 mt-3 shadow-lg">
+                        <video
+                          src={videoUrl.trim()}
+                          poster={posterPreviewUrl || posterUrl || DEFAULT_GENRE_POSTERS[primaryGenre]}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1137,6 +1169,64 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
           {/* STEP 4: PLACEMENT & PUBLISHING */}
           {activeStepTab === 4 && (
             <div className="space-y-6 max-w-3xl mx-auto">
+              {/* MASTER CINEMA SPOTLIGHT LIVE PREVIEW */}
+              <div className="bg-[#121319] border border-white/10 rounded-2xl p-5 space-y-4 shadow-md">
+                <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#E50914]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                      Master Cinema Spotlight Live Preview
+                    </h3>
+                  </div>
+                  <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-800/40">
+                    Live Video Test Active
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                  {/* Video Player Preview Frame */}
+                  <div className="md:col-span-2 relative aspect-video w-full rounded-xl overflow-hidden bg-black border border-white/15 shadow-2xl">
+                    {moviePreviewUrl || videoUrl ? (
+                      <video
+                        src={moviePreviewUrl || videoUrl}
+                        poster={posterPreviewUrl || posterUrl || DEFAULT_GENRE_POSTERS[primaryGenre] || DEFAULT_GENRE_POSTERS['Action']}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950 text-zinc-500 space-y-2">
+                        <FileVideo className="w-8 h-8 text-zinc-600" />
+                        <span className="text-xs">No video stream chosen yet</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Poster Thumbnail & Meta Info */}
+                  <div className="space-y-3 bg-[#0a0b10] border border-white/10 rounded-xl p-3">
+                    <div className="relative aspect-[2/3] w-28 mx-auto rounded-lg overflow-hidden border border-white/15 bg-black shadow-lg">
+                      <img
+                        src={posterPreviewUrl || posterUrl || DEFAULT_GENRE_POSTERS[primaryGenre] || DEFAULT_GENRE_POSTERS['Action']}
+                        alt="Poster"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <h4 className="font-bold text-white text-xs truncate">{title || 'Untitled Movie'}</h4>
+                      <p className="text-[11px] text-[#E50914] font-semibold">{selectedVjName}</p>
+                      <div className="flex items-center justify-center gap-1.5 text-[10px] text-zinc-400 font-mono">
+                        <span>{primaryGenre}</span>
+                        <span>·</span>
+                        <span>{releaseYear}</span>
+                        <span>·</span>
+                        <span>{durationMinutes}m</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-[#121319] border border-white/10 rounded-2xl p-5 space-y-4 shadow-md">
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider pb-2 border-b border-white/5">
                   Browse Placement &amp; Promotion

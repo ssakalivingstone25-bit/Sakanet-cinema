@@ -27,7 +27,7 @@ interface SettingsViewProps {
 
 export type ThemeOption = 'dark' | 'light' | 'system';
 
-export const SettingsView: React.FC<SettingsViewProps> = () => {
+export const SettingsView: React.FC<SettingsViewProps> = React.memo(() => {
   // Theme state
   const [theme, setTheme] = useState<ThemeOption>(() => {
     return (localStorage.getItem('sakanet_theme') as ThemeOption) || 'dark';
@@ -422,6 +422,6 @@ export const SettingsView: React.FC<SettingsViewProps> = () => {
       </div>
     </div>
   );
-};
+});
 
 export default SettingsView;

@@ -5,6 +5,7 @@ import {
   Play,
   Info,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
   X,
   Clock,
@@ -117,7 +118,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
 
   // 1. Strictly published movies uploaded by the admin (is_active === true)
   const publishedMovies = useMemo(() => {
-    return movies.filter((m) => m.is_active !== false && m.is_active !== 0 && m.is_active !== '0');
+    return movies.filter((m) => Boolean((m as any).is_active) && (m as any).is_active !== 'false' && (m as any).is_active !== '0');
   }, [movies]);
 
   // Personalized Recommendations based on Firestore watch history and genre preferences
@@ -328,8 +329,8 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
           EMPTY STATE (Fallback when database return is empty)
          ======================================================== */}
       {publishedMovies.length === 0 ? (
-        <div className="bg-[#121319] border border-white/10 rounded-2xl p-8 sm:p-14 text-center space-y-5 my-8 shadow-2xl animate-in fade-in">
-          <div className="w-16 h-16 rounded-2xl bg-zinc-950 border border-[#E50914]/40 flex items-center justify-center text-[#E50914] mx-auto shadow-xl">
+        <div className="bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md border border-white/[0.08] rounded-2xl p-8 sm:p-14 text-center space-y-5 my-8 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] animate-in fade-in relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/[0.12] before:to-transparent">
+          <div className="w-16 h-16 rounded-2xl bg-neutral-950 border border-[#E50914]/40 flex items-center justify-center text-[#E50914] mx-auto shadow-xl">
             <Film className="w-8 h-8" />
           </div>
           <div className="max-w-md mx-auto space-y-2">
@@ -344,7 +345,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
             {isAdmin ? (
               <button
                 onClick={() => onTabChange?.('admin')}
-                className="inline-flex items-center gap-2 bg-[#E50914] hover:bg-[#d60b23] text-white text-xs font-bold px-6 py-3 rounded-xl shadow-lg shadow-red-950/60 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold px-6 py-3 rounded-xl shadow-lg shadow-red-950/60 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>Open Admin Portal &amp; Add Movie</span>
@@ -353,7 +354,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
             ) : (
               <button
                 onClick={onOpenAuth}
-                className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold px-5 py-2.5 rounded-xl border border-white/10 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 bg-neutral-900/80 hover:bg-neutral-800 text-zinc-200 text-xs font-semibold px-5 py-2.5 rounded-xl border border-white/[0.08] transition-colors cursor-pointer"
               >
                 <span>Sign In with Admin Account</span>
               </button>
@@ -366,19 +367,19 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
               SECTION 2: MASTER CINEMA SPOTLIGHT (Master File Preview Style)
              ======================================================== */}
           {currentHeroMovie && !isFilteringActive && (
-            <section className="bg-[#0e0f15] border border-white/15 rounded-2xl p-4 sm:p-5 shadow-2xl mb-6 space-y-4">
+            <section className="bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md border border-white/[0.08] hover:border-red-500/30 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] mb-8 space-y-4 relative overflow-hidden transition-all duration-300 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/[0.15] before:to-transparent">
               {/* Top Header Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.08]">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-11 h-11 rounded-xl bg-red-950/80 border border-red-700/50 flex items-center justify-center text-[#E50914] shadow-lg shrink-0">
                     <FileVideo className="w-6 h-6" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#E50914] text-white">
+                      <span className="bg-[#E50914] text-white px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm">
                         CINEMA SPOTLIGHT
                       </span>
-                      <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/40 hidden sm:inline">
+                      <span className="bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 px-2.5 py-0.5 rounded-full text-[11px] font-mono hidden sm:inline">
                         Range Streaming Active
                       </span>
                     </div>
@@ -386,7 +387,9 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                       {currentHeroMovie.title}
                     </h2>
                     <div className="text-[11px] text-zinc-400 font-mono mt-0.5 flex items-center gap-2 flex-wrap">
-                      <span>{currentHeroMovie.file_size_mb || 750} MB</span>
+                      <span className="bg-black/40 backdrop-blur-sm px-2.5 py-0.5 rounded-full border border-white/[0.08] text-zinc-300 font-semibold">
+                        {currentHeroMovie.file_size_mb || 750} MB
+                      </span>
                       <span>·</span>
                       <span className="text-[#E50914] font-semibold">{currentHeroMovie.vj_name || 'VJ Junior'}</span>
                       <span>·</span>
@@ -403,7 +406,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => onPlayMovie(currentHeroMovie)}
-                    className="flex items-center gap-2 bg-[#E50914] hover:bg-[#d60b23] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg shadow-red-700/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                    className="flex items-center gap-2 bg-gradient-to-r from-[#E50914] to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg shadow-red-950/50 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                   >
                     <Maximize2 className="w-3.5 h-3.5" />
                     <span>Watch Fullscreen</span>
@@ -411,7 +414,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
 
                   <button
                     onClick={() => onDownloadMovie(currentHeroMovie)}
-                    className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/10 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                    className="flex items-center gap-1.5 bg-neutral-900/80 hover:bg-neutral-800 text-zinc-200 border border-white/[0.08] text-xs font-semibold px-3 py-2 rounded-xl transition-all cursor-pointer"
                     title="Download to Device Storage"
                   >
                     <Download className="w-3.5 h-3.5 text-emerald-400" />
@@ -420,14 +423,14 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
 
                   <button
                     onClick={() => onSelectMovie(currentHeroMovie)}
-                    className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/10 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                    className="flex items-center gap-1.5 bg-neutral-900/80 hover:bg-neutral-800 text-zinc-200 border border-white/[0.08] text-xs font-semibold px-3 py-2 rounded-xl transition-all cursor-pointer"
                   >
                     <Info className="w-3.5 h-3.5" />
                     <span>Details</span>
                   </button>
 
                   {featuredMovies.length > 1 && (
-                    <div className="flex items-center gap-1 bg-black/60 px-2 py-1.5 rounded-xl border border-white/10 ml-1">
+                    <div className="flex items-center gap-1 bg-black/60 px-2 py-1.5 rounded-xl border border-white/[0.08] ml-1">
                       {featuredMovies.map((_, idx) => (
                         <button
                           key={idx}
@@ -447,7 +450,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
               </div>
 
               {/* Contained Master Cinema Player Frame */}
-              <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black border border-white/10 shadow-2xl">
+              <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black border border-white/[0.08] shadow-2xl">
                 {currentHeroMovie.video_url || currentHeroMovie.file_url ? (
                   <video
                     key={currentHeroMovie.id}
@@ -474,10 +477,10 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                 </p>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-zinc-300 text-[11px] font-mono">
+                  <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-zinc-300 border border-white/[0.08]">
                     Audio: Luganda [VJ Translation]
                   </span>
-                  <span className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-zinc-300 text-[11px] font-mono">
+                  <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-zinc-300 border border-white/[0.08]">
                     1080p FHD
                   </span>
                 </div>
@@ -496,10 +499,10 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                     setSelectedGenre('All');
                     setSelectedVj('All');
                   }}
-                  className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all duration-200 cursor-pointer ${
                     selectedGenre === 'All' && selectedVj === 'All'
-                      ? 'bg-[#F20D28] text-white shadow-md shadow-red-700/40'
-                      : 'bg-[#121319] text-zinc-300 hover:text-white border border-white/10 hover:border-white/20'
+                      ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-[0_4px_16px_rgba(229,9,20,0.4)] border border-red-500/40'
+                      : 'bg-neutral-900/80 backdrop-blur-md text-zinc-300 hover:text-white border border-white/[0.08] hover:border-white/20 hover:bg-neutral-800/80'
                   }`}
                 >
                   All
@@ -509,10 +512,10 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   <div className="relative shrink-0">
                     <button
                       onClick={() => setShowGenresDropdown((prev) => !prev)}
-                      className={`px-3.5 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`px-3.5 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer flex items-center gap-1.5 ${
                         selectedGenre !== 'All'
-                          ? 'bg-[#F20D28] text-white shadow-md shadow-red-700/40'
-                          : 'bg-[#121319] text-zinc-300 hover:text-white border border-white/10 hover:border-white/20'
+                          ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-[0_4px_16px_rgba(229,9,20,0.4)] border border-red-500/40'
+                          : 'bg-neutral-900/80 backdrop-blur-md text-zinc-300 hover:text-white border border-white/[0.08] hover:border-white/20 hover:bg-neutral-800/80'
                       }`}
                     >
                       <span>{selectedGenre !== 'All' ? selectedGenre : 'Genres'}</span>
@@ -524,8 +527,8 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                     </button>
 
                     {showGenresDropdown && (
-                      <div className="absolute left-0 top-full mt-2 w-56 bg-[#121319] border border-white/15 rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95">
-                        <div className="px-3.5 py-1 text-[10px] uppercase font-bold text-zinc-500 tracking-wider border-b border-white/10">
+                      <div className="absolute left-0 top-full mt-2 w-56 bg-gradient-to-b from-neutral-900/95 to-neutral-950/98 backdrop-blur-md border border-white/[0.08] rounded-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] py-2 z-50 animate-in fade-in zoom-in-95">
+                        <div className="px-3.5 py-1 text-[10px] uppercase font-bold text-zinc-500 tracking-wider border-b border-white/[0.08]">
                           Select Genre
                         </div>
                         <div className="max-h-64 overflow-y-auto py-1">
@@ -536,12 +539,12 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                             }}
                             className={`w-full text-left px-3.5 py-2 text-xs transition-colors cursor-pointer flex items-center justify-between ${
                               selectedGenre === 'All'
-                                ? 'bg-[#F20D28]/20 text-[#F20D28] font-bold'
-                                : 'text-zinc-300 hover:bg-white/10 hover:text-white'
+                                ? 'bg-red-500/20 text-red-400 font-bold'
+                                : 'text-zinc-300 hover:bg-white/[0.06] hover:text-white'
                             }`}
                           >
                             <span>All Genres</span>
-                            {selectedGenre === 'All' && <Check className="w-3.5 h-3.5 text-[#F20D28]" />}
+                            {selectedGenre === 'All' && <Check className="w-3.5 h-3.5 text-red-500" />}
                           </button>
 
                           {availableGenres.map((genre) => {
@@ -555,12 +558,12 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                                 }}
                                 className={`w-full text-left px-3.5 py-2 text-xs transition-colors cursor-pointer flex items-center justify-between ${
                                   isSelected
-                                    ? 'bg-[#F20D28]/20 text-[#F20D28] font-bold'
-                                    : 'text-zinc-300 hover:bg-white/10 hover:text-white'
+                                    ? 'bg-red-500/20 text-red-400 font-bold'
+                                    : 'text-zinc-300 hover:bg-white/[0.06] hover:text-white'
                                 }`}
                               >
                                 <span>{genre}</span>
-                                {isSelected && <Check className="w-3.5 h-3.5 text-[#F20D28]" />}
+                                {isSelected && <Check className="w-3.5 h-3.5 text-red-500" />}
                               </button>
                             );
                           })}
@@ -577,10 +580,10 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                     <button
                       key={genre}
                       onClick={() => setSelectedGenre(genre)}
-                      className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                      className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
                         isActive
-                          ? 'bg-[#F20D28] text-white shadow-md shadow-red-700/40 border-transparent'
-                          : 'bg-[#121319] text-zinc-300 hover:text-white border border-white/10 hover:border-white/20'
+                          ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-[0_4px_16px_rgba(229,9,20,0.4)] border border-red-500/40'
+                          : 'bg-neutral-900/80 backdrop-blur-md text-zinc-300 hover:text-white border border-white/[0.08] hover:border-white/20 hover:bg-neutral-800/80'
                       }`}
                     >
                       {genre}
@@ -603,7 +606,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                 value={searchTerm}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder="Search movies, VJs, genres..."
-                className="w-full bg-[#121319] border border-white/10 rounded-full pl-11 pr-10 py-3 text-xs sm:text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#F20D28] focus:ring-1 focus:ring-[#F20D28] transition-all shadow-inner"
+                className="w-full bg-gradient-to-b from-neutral-900/80 to-neutral-950/90 backdrop-blur-md border border-white/[0.08] rounded-2xl pl-11 pr-10 py-3 text-xs sm:text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-red-500/60 focus:ring-1 focus:ring-red-500/40 shadow-[0_4px_24px_rgba(0,0,0,0.3)] transition-all"
               />
               {searchTerm && (
                 <button
@@ -619,11 +622,11 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
 
           {/* Active Filter Pill Summary */}
           {isFilteringActive && (
-            <div className="flex items-center justify-between bg-[#121319] border border-white/10 rounded-xl px-4 py-2.5 mb-6 text-xs animate-in fade-in">
+            <div className="flex items-center justify-between bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md border border-white/[0.08] rounded-2xl px-4 py-2.5 mb-6 text-xs shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] animate-in fade-in">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-zinc-400 font-medium">Filtering by:</span>
                 {selectedVj !== 'All' && (
-                  <span className="inline-flex items-center gap-1 bg-[#F20D28]/20 text-[#F20D28] border border-[#F20D28]/40 px-2.5 py-0.5 rounded-full font-bold">
+                  <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-400 border border-red-500/30 px-2.5 py-0.5 rounded-full font-bold">
                     <span>VJ: {selectedVj}</span>
                     <X
                       className="w-3 h-3 cursor-pointer hover:opacity-80"
@@ -632,7 +635,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   </span>
                 )}
                 {selectedGenre !== 'All' && (
-                  <span className="inline-flex items-center gap-1 bg-[#F20D28]/20 text-[#F20D28] border border-[#F20D28]/40 px-2.5 py-0.5 rounded-full font-bold">
+                  <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-400 border border-red-500/30 px-2.5 py-0.5 rounded-full font-bold">
                     <span>Genre: {selectedGenre}</span>
                     <X
                       className="w-3 h-3 cursor-pointer hover:opacity-80"
@@ -641,7 +644,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   </span>
                 )}
                 {searchTerm.trim() && (
-                  <span className="inline-flex items-center gap-1 bg-zinc-800 text-zinc-200 border border-white/15 px-2.5 py-0.5 rounded-full">
+                  <span className="inline-flex items-center gap-1 bg-black/40 backdrop-blur-sm text-zinc-200 border border-white/[0.08] px-2.5 py-0.5 rounded-full">
                     <span>"{searchTerm}"</span>
                     <X
                       className="w-3 h-3 cursor-pointer hover:opacity-80"
@@ -652,7 +655,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
               </div>
               <button
                 onClick={resetFilters}
-                className="text-[#F20D28] hover:underline font-semibold cursor-pointer shrink-0 ml-2"
+                className="text-[#F20D28] hover:text-red-400 font-semibold cursor-pointer shrink-0 ml-2 transition-colors"
               >
                 Reset All
               </button>
@@ -675,8 +678,8 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
               </div>
 
               {filteredMovies.length === 0 ? (
-                <div className="bg-[#121319] border border-white/10 rounded-2xl p-10 text-center space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-red-950/60 border border-red-800/40 flex items-center justify-center text-[#F20D28] mx-auto">
+                <div className="bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md border border-white/[0.08] rounded-2xl p-10 text-center space-y-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
+                  <div className="w-12 h-12 rounded-2xl bg-red-950/60 border border-red-800/40 flex items-center justify-center text-[#F20D28] mx-auto shadow-lg">
                     <Film className="w-6 h-6" />
                   </div>
                   <h3 className="text-base font-bold text-white">No Movies Found</h3>
@@ -685,7 +688,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   </p>
                   <button
                     onClick={resetFilters}
-                    className="mt-2 inline-flex items-center gap-1.5 bg-[#F20D28] hover:bg-[#d60b23] text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg transition-transform hover:scale-105 cursor-pointer"
+                    className="mt-2 inline-flex items-center gap-1.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg shadow-red-950/50 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                   >
                     <span>Reset Filters</span>
                   </button>
@@ -709,18 +712,18 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
               {!isHeavyContentReady ? (
                 <div className="space-y-8 animate-in fade-in duration-150 py-2">
                   <div className="space-y-3">
-                    <div className="h-5 w-44 bg-zinc-800/60 rounded-md animate-pulse" />
+                    <div className="h-5 w-44 bg-neutral-800/60 rounded-md animate-pulse" />
                     <div className="flex gap-4 overflow-hidden">
                       {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="w-52 sm:w-60 aspect-[16/10] bg-[#0e0f15] border border-white/5 rounded-2xl animate-pulse shrink-0" />
+                        <div key={i} className="w-52 sm:w-60 aspect-[16/10] bg-neutral-900/80 border border-white/[0.08] rounded-2xl animate-pulse shrink-0" />
                       ))}
                     </div>
                   </div>
                   <div className="space-y-3">
-                    <div className="h-5 w-36 bg-zinc-800/60 rounded-md animate-pulse" />
+                    <div className="h-5 w-36 bg-neutral-800/60 rounded-md animate-pulse" />
                     <div className="flex gap-4 overflow-hidden">
                       {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="w-52 sm:w-60 aspect-[16/10] bg-[#0e0f15] border border-white/5 rounded-2xl animate-pulse shrink-0" />
+                        <div key={i} className="w-52 sm:w-60 aspect-[16/10] bg-neutral-900/80 border border-white/[0.08] rounded-2xl animate-pulse shrink-0" />
                       ))}
                     </div>
                   </div>
@@ -762,31 +765,27 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   </div>
 
                   {/* Horizontal Recommended Movies Rail with Match Badges and Reasons */}
-                  <div className="flex items-start gap-4 overflow-x-auto no-scrollbar pb-2">
+                  <HorizontalScrollRail>
                     {recommendedList.slice(0, 10).map(({ movie, matchPercentage, reason }) => (
-                      <div key={movie.id} className="shrink-0 w-52 sm:w-60 group">
-                        <div className="relative">
+                      <div key={movie.id} className="shrink-0 w-60 sm:w-68 flex flex-col justify-between group">
+                        <div className="relative flex-1">
                           <MoviePosterCard
                             movie={movie}
                             onSelect={() => onSelectMovie(movie)}
                             onPlay={() => onPlayMovie(movie)}
                             onDownload={() => onDownloadMovie(movie)}
+                            matchPercentage={matchPercentage}
                           />
-                          {/* Match Percentage Pill */}
-                          <div className="absolute top-4 left-4 z-10 px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-md border border-red-500/40 text-[10px] font-mono font-black text-red-400 shadow-lg flex items-center gap-1 pointer-events-none">
-                            <Sparkles className="w-2.5 h-2.5 text-red-500" />
-                            <span>{matchPercentage}% Match</span>
-                          </div>
                         </div>
 
                         {/* Recommendation Reason Badge */}
-                        <div className="mt-2 px-2.5 py-1 rounded-lg bg-[#14151e] border border-white/5 text-[10px] text-zinc-300 font-medium truncate flex items-center gap-1.5 shadow-sm">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                        <div className="mt-2.5 px-3 py-1.5 rounded-xl bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md border border-white/[0.08] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] text-xs text-zinc-300 font-medium truncate flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0 shadow-[0_0_6px_#ef4444]" />
                           <span className="truncate">{reason.label}</span>
                         </div>
                       </div>
                     ))}
-                  </div>
+                  </HorizontalScrollRail>
                 </section>
               )}
 
@@ -794,7 +793,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   SECTION 5: BROWSE BY VJ (Strictly Real VJs from Uploaded Movies)
                  ======================================================== */}
               {vjProfiles.length > 0 && (
-                <section className="mb-7">
+                <section className="mb-8">
                   <div className="flex items-center justify-between mb-3.5">
                     <h2 className="text-lg sm:text-xl font-bold font-display text-white tracking-tight">
                       Browse by VJ
@@ -802,7 +801,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                     {vjProfiles.length > 3 && (
                       <button
                         onClick={() => setSeeAllModal('vj')}
-                        className="text-xs text-[#F20D28] hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                        className="text-xs text-[#F20D28] hover:text-red-400 font-semibold flex items-center gap-0.5 cursor-pointer transition-colors"
                       >
                         <span>See All</span>
                         <ChevronRight className="w-3.5 h-3.5" />
@@ -811,16 +810,16 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   </div>
 
                   {/* Horizontal VJ Cards Rail */}
-                  <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-1">
+                  <HorizontalScrollRail>
                     {vjProfiles.map((vj) => (
                       <div
                         key={vj.name}
                         onClick={() => setSelectedVj(vj.name)}
-                        className="bg-[#121319] hover:bg-[#181922] border border-white/10 hover:border-[#F20D28]/60 rounded-xl p-3 flex items-center gap-3 shrink-0 min-w-[210px] sm:min-w-[230px] transition-all duration-200 cursor-pointer shadow-md group"
+                        className="bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md border border-white/[0.08] hover:border-red-500/50 focus-within:border-red-500/50 rounded-2xl p-4 sm:p-5 flex items-center gap-3.5 shrink-0 min-w-[240px] sm:min-w-[270px] transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] cursor-pointer group will-change-transform relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/[0.12] before:to-transparent"
                       >
                         {/* Circular Avatar with Glowing Red Ring */}
-                        <div className="relative w-12 h-12 rounded-full ring-2 ring-[#F20D28] overflow-hidden shrink-0 bg-zinc-900 shadow-md flex items-center justify-center">
-                          <span className="text-[11px] font-black text-zinc-300 absolute">
+                        <div className="relative w-12 h-12 rounded-full ring-2 ring-[#F20D28] shadow-[0_0_12px_rgba(242,13,40,0.4)] overflow-hidden shrink-0 bg-neutral-950 flex items-center justify-center">
+                          <span className="text-xs font-black text-zinc-300 absolute">
                             {vj.name.replace(/^VJ\s+/i, '').substring(0, 2).toUpperCase()}
                           </span>
                           {vj.avatar && (
@@ -841,14 +840,21 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                           <h3 className="text-sm font-bold text-white truncate group-hover:text-red-400 transition-colors">
                             {vj.name}
                           </h3>
-                          <p className="text-[11px] text-zinc-400 truncate mt-0.5">{vj.genres}</p>
+                          <p className="text-xs text-zinc-400 truncate mt-0.5">{vj.genres}</p>
+                          {vj.count > 0 && (
+                            <div className="mt-1">
+                              <span className="bg-black/40 backdrop-blur-sm px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide text-zinc-400 border border-white/[0.06]">
+                                {vj.count} {vj.count === 1 ? 'movie' : 'movies'}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Right Navigation Arrow */}
-                        <ChevronRight className="w-4 h-4 text-zinc-400 group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
+                        <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
                       </div>
                     ))}
-                  </div>
+                  </HorizontalScrollRail>
                 </section>
               )}
 
@@ -856,20 +862,20 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   SECTION 6: TRENDING MOVIES (Strictly Frequently Watched or Downloaded)
                  ======================================================== */}
               {trendingMovies.length > 0 && (
-                <section className="mb-7">
+                <section className="mb-8">
                   <div className="flex items-center justify-between mb-3.5">
                     <div className="flex items-center gap-2">
                       <h2 className="text-lg sm:text-xl font-bold font-display text-white tracking-tight">
                         Trending Movies
                       </h2>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950/80 text-red-400 font-semibold border border-red-800/40">
+                      <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-red-400 border border-red-500/30">
                         Most Watched
                       </span>
                     </div>
                     {trendingMovies.length > 4 && (
                       <button
                         onClick={() => setSeeAllModal('trending')}
-                        className="text-xs text-[#F20D28] hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                        className="text-xs text-[#F20D28] hover:text-red-400 font-semibold flex items-center gap-0.5 cursor-pointer transition-colors"
                       >
                         <span>See All</span>
                         <ChevronRight className="w-3.5 h-3.5" />
@@ -878,9 +884,9 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   </div>
 
                   {/* Horizontal Movie Rail */}
-                  <div className="flex items-start gap-4 overflow-x-auto no-scrollbar pb-2">
+                  <HorizontalScrollRail>
                     {trendingMovies.slice(0, 10).map((movie) => (
-                      <div key={movie.id} className="shrink-0 w-52 sm:w-60">
+                      <div key={movie.id} className="shrink-0 w-60 sm:w-68 flex flex-col justify-between">
                         <MoviePosterCard
                           movie={movie}
                           onSelect={() => onSelectMovie(movie)}
@@ -889,7 +895,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                         />
                       </div>
                     ))}
-                  </div>
+                  </HorizontalScrollRail>
                 </section>
               )}
 
@@ -897,7 +903,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   SECTION 7: RECENTLY ADDED (Ordered by upload date, newest first)
                  ======================================================== */}
               {recentlyAddedMovies.length > 0 && (
-                <section className="mb-7">
+                <section className="mb-8">
                   <div className="flex items-center justify-between mb-3.5">
                     <h2 className="text-lg sm:text-xl font-bold font-display text-white tracking-tight">
                       Recently Added
@@ -905,7 +911,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                     {recentlyAddedMovies.length > 4 && (
                       <button
                         onClick={() => setSeeAllModal('recent')}
-                        className="text-xs text-[#F20D28] hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                        className="text-xs text-[#F20D28] hover:text-red-400 font-semibold flex items-center gap-0.5 cursor-pointer transition-colors"
                       >
                         <span>See All</span>
                         <ChevronRight className="w-3.5 h-3.5" />
@@ -914,9 +920,9 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   </div>
 
                   {/* Horizontal Movie Rail */}
-                  <div className="flex items-start gap-4 overflow-x-auto no-scrollbar pb-2">
+                  <HorizontalScrollRail>
                     {recentlyAddedMovies.slice(0, 10).map((movie) => (
-                      <div key={movie.id} className="shrink-0 w-52 sm:w-60">
+                      <div key={movie.id} className="shrink-0 w-60 sm:w-68 flex flex-col justify-between">
                         <MoviePosterCard
                           movie={movie}
                           onSelect={() => onSelectMovie(movie)}
@@ -925,7 +931,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                         />
                       </div>
                     ))}
-                  </div>
+                  </HorizontalScrollRail>
                 </section>
               )}
 
@@ -933,7 +939,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   SECTION 8: CONTINUE WATCHING (If real watch progress exists)
                  ======================================================== */}
               {continueWatchingList.length > 0 && (
-                <section className="mb-7">
+                <section className="mb-8">
                   <div className="flex items-center justify-between mb-3.5">
                     <h2 className="text-lg sm:text-xl font-bold font-display text-white tracking-tight flex items-center gap-2">
                       <Clock className="w-4 h-4 text-[#F20D28]" />
@@ -941,40 +947,47 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                     </h2>
                   </div>
 
-                  <div className="flex items-start gap-3.5 sm:gap-4 overflow-x-auto no-scrollbar pb-1">
+                  <HorizontalScrollRail>
                     {continueWatchingList.map(({ movie, progress }) => (
                       <div
                         key={movie.id}
                         onClick={() => onPlayMovie(movie)}
-                        className="shrink-0 w-44 sm:w-52 cursor-pointer group bg-[#121319] border border-white/10 hover:border-[#F20D28]/60 rounded-xl overflow-hidden transition-all shadow-md"
+                        className="shrink-0 w-60 sm:w-68 cursor-pointer group bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md border border-white/[0.08] hover:border-red-500/50 rounded-2xl p-4 sm:p-5 overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] will-change-transform relative flex flex-col justify-between before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/[0.12] before:to-transparent"
                       >
-                        <div className="relative aspect-[16/9] w-full overflow-hidden bg-black">
+                        <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-neutral-950 border border-white/[0.06] shadow-inner">
                           <img
                             src={movie.banner_url || movie.thumbnail_url}
                             alt={movie.title}
                             referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                           />
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="w-10 h-10 rounded-full bg-[#F20D28] text-white flex items-center justify-center shadow-lg">
+                          <div className="absolute inset-0 bg-neutral-950/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 backdrop-blur-[2px]">
+                            <div className="w-11 h-11 rounded-full bg-[#E50914] text-white flex items-center justify-center shadow-[0_0_24px_rgba(229,9,20,0.6)]">
                               <Play className="w-5 h-5 fill-current ml-0.5" />
                             </div>
                           </div>
-                          {/* Progress Bar */}
-                          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-zinc-800">
+                          {/* Progress Bar Track */}
+                          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-neutral-900/80">
                             <div
-                              className="h-full bg-[#F20D28]"
+                              className="h-full bg-[#E50914] shadow-[0_0_8px_#E50914]"
                               style={{ width: `${Math.min(100, progress.progressPercent || 20)}%` }}
                             />
                           </div>
                         </div>
-                        <div className="p-2.5">
-                          <h4 className="text-xs font-bold text-white truncate">{movie.title}</h4>
-                          <span className="text-[10px] text-zinc-400">Resume movie</span>
+                        <div className="pt-3 flex items-center justify-between">
+                          <div className="truncate pr-2">
+                            <h4 className="text-sm font-bold text-white tracking-tight truncate group-hover:text-red-400 transition-colors">
+                              {movie.title}
+                            </h4>
+                            <span className="text-xs text-zinc-400">Resume movie</span>
+                          </div>
+                          <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-zinc-300 border border-white/10 shrink-0">
+                            {progress.progressPercent || 20}%
+                          </span>
                         </div>
                       </div>
                     ))}
-                  </div>
+                  </HorizontalScrollRail>
                 </section>
               )}
             </>
@@ -1023,9 +1036,9 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                       setSelectedVj(vj.name);
                       setSeeAllModal(null);
                     }}
-                    className="bg-[#121319] hover:bg-[#181922] border border-white/10 hover:border-[#F20D28]/60 rounded-xl p-3.5 flex items-center gap-3.5 cursor-pointer transition-all shadow-md group"
+                    className="bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md border border-white/[0.08] hover:border-red-500/50 rounded-2xl p-4 flex items-center gap-3.5 cursor-pointer transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] group relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/[0.12] before:to-transparent"
                   >
-                    <div className="w-13 h-13 rounded-full ring-2 ring-[#F20D28] overflow-hidden shrink-0 bg-zinc-900 shadow flex items-center justify-center relative">
+                    <div className="w-13 h-13 rounded-full ring-2 ring-[#F20D28] shadow-[0_0_12px_rgba(242,13,40,0.4)] overflow-hidden shrink-0 bg-neutral-950 flex items-center justify-center relative">
                       <span className="text-xs font-black text-zinc-300 absolute">
                         {vj.name.replace(/^VJ\s+/i, '').substring(0, 2).toUpperCase()}
                       </span>
@@ -1047,12 +1060,14 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                       </h4>
                       <p className="text-xs text-zinc-400 truncate mt-0.5">{vj.genres}</p>
                       {vj.count > 0 && (
-                        <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
-                          {vj.count} {vj.count === 1 ? 'movie' : 'movies'} available
-                        </span>
+                        <div className="mt-1">
+                          <span className="bg-black/40 backdrop-blur-sm px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide text-zinc-400 border border-white/[0.06]">
+                            {vj.count} {vj.count === 1 ? 'movie' : 'movies'} available
+                          </span>
+                        </div>
                       )}
                     </div>
-                    <ChevronRight className="w-4 h-4 text-zinc-400 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
+                    <ChevronRight className="w-4 h-4 text-zinc-400 group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
                   </div>
                 ))}
               </div>
@@ -1094,6 +1109,84 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
 });
 
 // ========================================================
+// HORIZONTAL SCROLL RAIL (High-End Spatial Smooth Carousel)
+// ========================================================
+interface HorizontalScrollRailProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+const HorizontalScrollRail: React.FC<HorizontalScrollRailProps> = ({ children, className = '' }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+    setCanScrollLeft(scrollLeft > 15);
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 15);
+  };
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    checkScroll();
+    el.addEventListener('scroll', checkScroll, { passive: true });
+    window.addEventListener('resize', checkScroll);
+    return () => {
+      el.removeEventListener('scroll', checkScroll);
+      window.removeEventListener('resize', checkScroll);
+    };
+  }, [children]);
+
+  const scroll = (direction: 'left' | 'right') => {
+    if (!scrollRef.current) return;
+    const scrollAmount = Math.max(280, scrollRef.current.clientWidth * 0.7);
+    scrollRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
+  };
+
+  return (
+    <div className="relative group/rail">
+      {/* Left Chevron Button (Desktop Hover) */}
+      {canScrollLeft && (
+        <button
+          type="button"
+          onClick={() => scroll('left')}
+          className="hidden md:flex absolute -left-3 top-1/2 -translate-y-1/2 z-30 w-9 h-9 rounded-full bg-neutral-950/85 hover:bg-neutral-900 border border-white/[0.12] hover:border-red-500/50 text-white shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] backdrop-blur-md items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 cursor-pointer opacity-0 group-hover/rail:opacity-100 focus:opacity-100"
+          aria-label="Scroll left"
+        >
+          <ChevronLeft className="w-5 h-5 text-white" />
+        </button>
+      )}
+
+      {/* Scrollable Row */}
+      <div
+        ref={scrollRef}
+        className={`flex items-stretch gap-4 sm:gap-5 overflow-x-auto no-scrollbar pb-3 pt-1 px-1 -mx-1 scroll-smooth ${className}`}
+      >
+        {children}
+      </div>
+
+      {/* Right Chevron Button (Desktop Hover) */}
+      {canScrollRight && (
+        <button
+          type="button"
+          onClick={() => scroll('right')}
+          className="hidden md:flex absolute -right-3 top-1/2 -translate-y-1/2 z-30 w-9 h-9 rounded-full bg-neutral-950/85 hover:bg-neutral-900 border border-white/[0.12] hover:border-red-500/50 text-white shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] backdrop-blur-md items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 cursor-pointer opacity-0 group-hover/rail:opacity-100 focus:opacity-100"
+          aria-label="Scroll right"
+        >
+          <ChevronRight className="w-5 h-5 text-white" />
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ========================================================
 // MOVIE POSTER CARD (Contained Cinema Master File Preview Style)
 // ========================================================
 interface MoviePosterCardProps {
@@ -1101,9 +1194,10 @@ interface MoviePosterCardProps {
   onSelect: () => void;
   onPlay?: () => void;
   onDownload?: () => void;
+  matchPercentage?: number;
 }
 
-const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onSelect, onPlay, onDownload }) => {
+const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onSelect, onPlay, onDownload, matchPercentage }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const posterSrc =
     movie.banner_url ||
@@ -1115,14 +1209,14 @@ const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onS
   return (
     <div
       onClick={onSelect}
-      className="group flex flex-col bg-[#0e0f15] border border-white/10 hover:border-[#E50914]/70 rounded-2xl overflow-hidden p-3 transition-all duration-300 shadow-xl hover:shadow-2xl hover:scale-[1.015] cursor-pointer text-left select-none will-change-transform"
+      className="group relative flex flex-col justify-between rounded-2xl border border-white/[0.08] hover:border-red-500/50 focus-within:border-red-500/50 bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] p-4 sm:p-5 transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] cursor-pointer text-left select-none will-change-transform overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/[0.15] before:to-transparent h-full"
       style={{ transform: 'translate3d(0, 0, 0)' }}
     >
       {/* Contained Media Preview Frame (Fixed Aspect Ratio to Eliminate CLS) */}
-      <div className="relative aspect-[16/10] w-full rounded-xl overflow-hidden bg-[#14151e] border border-white/10 shrink-0">
+      <div className="relative aspect-[16/10] w-full rounded-xl overflow-hidden bg-neutral-950 border border-white/[0.06] shrink-0 shadow-inner">
         {!imageLoaded && (
-          <div className="absolute inset-0 bg-zinc-900/80 animate-pulse flex items-center justify-center">
-            <Film className="w-6 h-6 text-zinc-700 animate-pulse" />
+          <div className="absolute inset-0 bg-neutral-900/80 animate-pulse flex items-center justify-center">
+            <Film className="w-6 h-6 text-neutral-600 animate-pulse" />
           </div>
         )}
         <img
@@ -1131,15 +1225,15 @@ const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onS
           referrerPolicy="no-referrer"
           loading="lazy"
           onLoad={() => setImageLoaded(true)}
-          className={`w-full h-full object-cover transition-all duration-300 ${
+          className={`w-full h-full object-cover transition-all duration-500 ease-out ${
             imageLoaded ? 'opacity-100 scale-100 group-hover:scale-105' : 'opacity-0 scale-95'
           }`}
           style={{ willChange: 'transform, opacity' }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/20 to-transparent pointer-events-none" />
 
         {/* Play Overlay */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/40 backdrop-blur-[2px]">
           <button
             type="button"
             onClick={(e) => {
@@ -1148,44 +1242,56 @@ const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onS
                 onPlay();
               }
             }}
-            className="w-10 h-10 rounded-full bg-[#E50914] text-white flex items-center justify-center shadow-2xl hover:scale-110 transition-transform cursor-pointer"
+            className="w-11 h-11 rounded-full bg-[#E50914] text-white flex items-center justify-center shadow-[0_0_24px_rgba(229,9,20,0.6)] hover:scale-110 active:scale-95 transition-transform cursor-pointer"
             title="Play Movie"
           >
             <Play className="w-5 h-5 fill-white ml-0.5" />
           </button>
         </div>
 
-        {/* Quality Tag */}
-        <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-sm border border-white/10 text-[9px] font-mono text-zinc-300 font-bold">
-          1080p FHD
+        {/* Top Media Tags */}
+        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 pointer-events-none">
+          {matchPercentage !== undefined && (
+            <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-red-400 border border-red-500/30 shadow-sm flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-red-500" />
+              <span>{matchPercentage}% Match</span>
+            </span>
+          )}
+          <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-zinc-200 border border-white/10 shadow-sm">
+            1080p FHD
+          </span>
         </div>
 
-        {/* Size Tag */}
-        <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-sm border border-white/10 text-[9px] font-mono text-zinc-300">
-          {movie.file_size_mb ? `${movie.file_size_mb} MB` : 'Stream'}
+        {/* Bottom Size / Stream Pill */}
+        <div className="absolute bottom-2.5 right-2.5 pointer-events-none">
+          <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-zinc-300 border border-white/10 shadow-sm">
+            {movie.file_size_mb ? `${movie.file_size_mb} MB` : 'Stream'}
+          </span>
         </div>
       </div>
 
       {/* Card Info Details */}
-      <div className="pt-2.5 px-0.5 space-y-1 text-left flex-1 flex flex-col justify-between">
+      <div className="pt-3.5 space-y-2 text-left flex-1 flex flex-col justify-between">
         <div>
-          <div className="flex items-center justify-between text-[11px] text-zinc-400 font-medium">
-            <span className="text-[#E50914] font-bold truncate max-w-[120px]">
+          <div className="flex items-center justify-between text-xs text-zinc-400 font-medium">
+            <span className="text-[#E50914] font-bold tracking-tight truncate max-w-[130px]">
               {movie.vj_name || 'VJ Junior'}
             </span>
-            <span className="text-zinc-500 font-mono text-[10px]">{movie.release_year}</span>
+            <span className="text-zinc-400 font-mono text-[11px] font-semibold">{movie.release_year}</span>
           </div>
 
-          <h4 className="text-xs sm:text-sm font-bold text-white truncate leading-snug group-hover:text-red-400 transition-colors mt-0.5 min-h-[18px]">
+          <h4 className="text-sm sm:text-base font-bold text-white tracking-tight line-clamp-2 leading-snug group-hover:text-red-400 transition-colors mt-1 min-h-[40px]">
             {movie.title}
           </h4>
         </div>
 
-        {/* Action Row */}
-        <div className="flex items-center justify-between pt-2 text-[11px] border-t border-white/5 mt-2">
-          <span className="text-zinc-500 font-mono text-[10px] truncate max-w-[80px]">{movie.genre}</span>
+        {/* Action Row - Strictly Aligned Across Cards */}
+        <div className="flex items-center justify-between pt-3 border-t border-white/[0.08] mt-3">
+          <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-zinc-300 border border-white/[0.08] truncate max-w-[100px]">
+            {movie.genre || 'Action'}
+          </span>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             {onDownload && (
               <button
                 type="button"
@@ -1193,7 +1299,7 @@ const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onS
                   e.stopPropagation();
                   onDownload();
                 }}
-                className="p-1 rounded-lg bg-white/5 hover:bg-white/10 text-emerald-400 transition-colors cursor-pointer"
+                className="p-2 rounded-xl bg-white/[0.06] hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-white/[0.08] hover:border-emerald-500/40 transition-all cursor-pointer shadow-sm active:scale-95"
                 title="Download to Phone"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -1207,7 +1313,7 @@ const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onS
                   onPlay();
                 }
               }}
-              className="px-2.5 py-1 rounded-lg bg-[#E50914] hover:bg-[#d60b23] text-white text-[11px] font-bold transition-transform active:scale-95 flex items-center gap-1 shadow cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 shadow-md shadow-red-950/40 hover:shadow-red-700/30 cursor-pointer"
             >
               <Play className="w-3 h-3 fill-current" />
               <span>Watch</span>

@@ -25,7 +25,7 @@ interface OfflineDownloadsViewProps {
   onSelectMovie?: (movie: Movie) => void;
 }
 
-export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = ({
+export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = React.memo(({
   downloads,
   movies,
   onSelectMovie,
@@ -328,6 +328,6 @@ export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = ({
       )}
     </div>
   );
-};
+});
 
 export default OfflineDownloadsView;

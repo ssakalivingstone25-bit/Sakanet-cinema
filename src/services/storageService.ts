@@ -2,6 +2,7 @@ import { Movie, VJ, UserReview, DownloadItem, UserProfile, WatchProgress } from 
 
 const STORAGE_KEYS = {
   MOVIES: 'sakanet_movies_v2',
+  DELETED_MOVIES: 'sakanet_deleted_movies_v2',
   VJS: 'sakanet_vjs_v2',
   REVIEWS: 'sakanet_reviews_v2',
   DOWNLOADS: 'sakanet_downloads_v2',
@@ -25,6 +26,40 @@ export const guestUser: UserProfile = {
 export const defaultUser = guestUser;
 
 export const storageService = {
+  // --- DELETED MOVIE TOMBSTONES ---
+  getDeletedMovieIds(): Set<string> {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.DELETED_MOVIES);
+      if (!data) return new Set();
+      const parsed = JSON.parse(data);
+      return new Set(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      return new Set();
+    }
+  },
+
+  addDeletedMovieIds(ids: string[]): void {
+    try {
+      const current = this.getDeletedMovieIds();
+      ids.forEach((id) => {
+        if (id) current.add(String(id));
+      });
+      localStorage.setItem(STORAGE_KEYS.DELETED_MOVIES, JSON.stringify(Array.from(current)));
+    } catch (e) {
+      console.warn('Failed to persist deleted movie IDs:', e);
+    }
+  },
+
+  removeDeletedMovieId(id: string): void {
+    try {
+      const current = this.getDeletedMovieIds();
+      if (current.has(id)) {
+        current.delete(id);
+        localStorage.setItem(STORAGE_KEYS.DELETED_MOVIES, JSON.stringify(Array.from(current)));
+      }
+    } catch {}
+  },
+
   // --- MOVIES (Strictly real movies from database/user URL streaming) ---
   getMovies(): Movie[] {
     try {
@@ -32,9 +67,10 @@ export const storageService = {
       if (!data) return [];
       const parsed = JSON.parse(data);
       if (!Array.isArray(parsed)) return [];
-      // Clean, validate real movies with valid identifiers and provide safe fallbacks
+      const deletedIds = this.getDeletedMovieIds();
+      // Clean, validate real movies with valid identifiers, omitting tombstoned movies
       return parsed
-        .filter((m: any) => m && m.id && m.title)
+        .filter((m: any) => m && m.id && m.title && !deletedIds.has(String(m.id)))
         .map((m: any) => {
           const video = m.video_url || m.file_url || m.videoUrl || (m.filename ? `/movies/${m.filename}` : '');
           const poster =
@@ -120,10 +156,22 @@ export const storageService = {
     return newMovie;
   },
 
-  updateMovie(id: string, updates: Partial<Movie>): Movie | null {
+  updateMovie(id: string, updates: Partial<Movie>): Movie {
+    this.removeDeletedMovieId(id);
     const movies = this.getMovies();
     const index = movies.findIndex((m) => m.id === id);
-    if (index === -1) return null;
+    if (index === -1) {
+      const fallbackMovie = {
+        id,
+        title: 'Untitled Movie',
+        genre: 'Action',
+        video_url: '',
+        poster_url: '',
+        ...updates,
+      } as Movie;
+      this.saveMovies([fallbackMovie, ...movies]);
+      return fallbackMovie;
+    }
 
     movies[index] = { ...movies[index], ...updates };
     this.saveMovies(movies);
@@ -141,6 +189,9 @@ export const storageService = {
   },
 
   deleteMovie(id: string): boolean {
+    // Record tombstone so this movie never resurrects from stale snapshots
+    this.addDeletedMovieIds([id]);
+
     const movies = this.getMovies();
     const updated = movies.filter((m) => m.id !== id);
     this.saveMovies(updated);
@@ -175,6 +226,7 @@ export const storageService = {
   },
 
   deleteMultipleMovies(ids: string[]): boolean {
+    this.addDeletedMovieIds(ids);
     ids.forEach((id) => this.deleteMovie(id));
     return true;
   },

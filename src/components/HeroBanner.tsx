@@ -12,7 +12,7 @@ interface HeroBannerProps {
   downloadItem?: DownloadItem;
 }
 
-export const HeroBanner: React.FC<HeroBannerProps> = ({
+export const HeroBanner: React.FC<HeroBannerProps> = React.memo(({
   movie,
   onPlay,
   onSelect,
@@ -158,4 +158,4 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
       </div>
     </div>
   );
-};
+});
