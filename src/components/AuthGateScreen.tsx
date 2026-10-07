@@ -10,6 +10,7 @@ import {
 import { UserProfile } from '../types';
 import { signInWithGoogle, signInWithGoogleRedirect } from '../services/firebase';
 import { storageService } from '../services/storageService';
+import { SakanetLogo } from './SakanetLogo';
 
 interface AuthGateScreenProps {
   onAuthenticated: (user: UserProfile) => void;
@@ -82,19 +83,7 @@ export const AuthGateScreen: React.FC<AuthGateScreenProps> = ({ onAuthenticated 
 
       {/* Header bar */}
       <header className="relative z-10 w-full px-6 py-6 max-w-6xl mx-auto flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-[#E50914] flex items-center justify-center shadow-lg shadow-red-700/30">
-            <Film className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-lg font-black tracking-wider text-white font-display">
-              SAKANET
-            </span>
-            <span className="text-[11px] font-semibold tracking-widest text-[#E50914] uppercase">
-              CINEMA
-            </span>
-          </div>
-        </div>
+        <SakanetLogo size="md" />
 
         <div className="flex items-center gap-2 text-xs text-zinc-400">
           <Shield className="w-3.5 h-3.5 text-zinc-500" />
@@ -106,10 +95,8 @@ export const AuthGateScreen: React.FC<AuthGateScreenProps> = ({ onAuthenticated 
       <main className="relative z-10 max-w-md w-full mx-auto px-4 py-8">
         <div className="bg-[#121319]/90 border border-white/10 rounded-2xl shadow-2xl p-7 sm:p-9 backdrop-blur-xl space-y-6">
           {/* Card Header */}
-          <div className="text-center space-y-2">
-            <div className="w-12 h-12 mx-auto rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shadow-inner mb-4">
-              <Film className="w-6 h-6 text-[#E50914]" />
-            </div>
+          <div className="text-center space-y-3 flex flex-col items-center">
+            <SakanetLogo size="lg" showText={false} />
             <h1 className="text-2xl font-bold font-display text-white tracking-tight">
               Sign in to Sakanet Cinema
             </h1>

@@ -35,9 +35,11 @@ import { apiService } from '../services/apiService';
 
 interface AdminPortalViewProps {
   movies: Movie[];
-  onMoviesChanged: () => Promise<void> | void;
+  onMoviesChanged: (deletedMovieIds?: string[]) => Promise<void> | void;
   onSelectMovie: (movie: Movie) => void;
   onNavigateTab?: (tab: 'settings' | 'browse' | 'downloads' | 'admin') => void;
+  onDeleteMovie?: (movieId: string) => Promise<void> | void;
+  onDeleteMultipleMovies?: (movieIds: string[]) => Promise<void> | void;
 }
 
 export const AdminPortalView: React.FC<AdminPortalViewProps> = React.memo(({
@@ -45,6 +47,8 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = React.memo(({
   onMoviesChanged,
   onSelectMovie,
   onNavigateTab,
+  onDeleteMovie,
+  onDeleteMultipleMovies,
 }) => {
   // Navigation between Pipeline Tabs
   const [pipelineTab, setPipelineTab] = useState<'awaiting' | 'published'>('awaiting');
@@ -59,6 +63,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = React.memo(({
     movieIds: string[];
     titles: string[];
   } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Description / Edit Modal state
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
@@ -210,33 +215,115 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = React.memo(({
     showToast(`Published ${count} movie(s) to the live platform!`);
   };
 
-  // Confirm and execute permanent deletion (IN-APP MODAL)
-  const executeConfirmedDeletion = () => {
-    if (!deleteConfirmation) return;
+  // Direct single movie deletion (triggers central movie state, storageService, SQLite, Firestore)
+  const handleDirectSingleDelete = async (movie: Movie) => {
+    const movieId = movie.id;
 
-    const { movieIds } = deleteConfirmation;
+    // 1. Delete from underlying storageService
+    storageService.deleteMovie(movieId);
 
-    // Delete locally
-    storageService.deleteMultipleMovies(movieIds);
+    // 2. Trigger deletion from central movie state
+    if (onDeleteMovie) {
+      await onDeleteMovie(movieId);
+    }
 
-    // Delete in server database
-    movieIds.forEach((id) => {
-      apiService.deleteMovie(id);
-    });
+    // 3. Delete from backend SQLite database and remove associated media files
+    try {
+      await apiService.deleteMovie(movieId);
+    } catch (err) {
+      console.warn('API delete movie notice:', err);
+    }
 
-    // Delete in Firestore
-    deleteMultipleMoviesFromFirestore(movieIds);
+    // 4. Delete from Firestore cloud database
+    try {
+      await deleteMovieFromFirestore(movieId);
+    } catch (err) {
+      console.warn('Firestore delete movie notice:', err);
+    }
 
-    // Clear selection
+    // 5. Update local selectedMovieIds if it was selected
     setSelectedMovieIds((prev) => {
       const next = new Set(prev);
-      movieIds.forEach((id) => next.delete(id));
+      next.delete(movieId);
       return next;
     });
 
-    onMoviesChanged();
-    showToast(`Permanently deleted ${movieIds.length} movie(s)`);
-    setDeleteConfirmation(null);
+    // 6. Notify parent state of deletion
+    await onMoviesChanged([movieId]);
+    showToast(`Permanently deleted "${movie.title}"`);
+  };
+
+  // Explicit Delete Button click handler
+  const handleExplicitDeleteClick = (e: React.MouseEvent, movie: Movie) => {
+    e.stopPropagation();
+    // Shift+Click provides quick direct deletion without modal prompt
+    if (e.shiftKey) {
+      handleDirectSingleDelete(movie);
+    } else {
+      triggerSingleDelete(movie);
+    }
+  };
+
+  // Confirm and execute permanent deletion (IN-APP MODAL)
+  const executeConfirmedDeletion = async () => {
+    if (!deleteConfirmation || isDeleting) return;
+
+    setIsDeleting(true);
+    const { movieIds, titles } = deleteConfirmation;
+
+    try {
+      // 1. Delete from underlying storageService (LocalStorage, tombstones, downloads, watchlist)
+      storageService.deleteMultipleMovies(movieIds);
+      movieIds.forEach((id) => {
+        storageService.deleteMovie(id);
+      });
+
+      // 2. Trigger deletion from central movie state
+      if (onDeleteMultipleMovies) {
+        await onDeleteMultipleMovies(movieIds);
+      } else if (onDeleteMovie) {
+        for (const id of movieIds) {
+          await onDeleteMovie(id);
+        }
+      }
+
+      // 3. Delete from backend server database (SQLite & disk files)
+      for (const id of movieIds) {
+        try {
+          await apiService.deleteMovie(id);
+        } catch (err) {
+          console.warn('Backend delete movie notice:', err);
+        }
+      }
+
+      // 4. Delete in Firestore cloud database
+      try {
+        await deleteMultipleMoviesFromFirestore(movieIds);
+      } catch (err) {
+        console.warn('Firestore bulk delete notice:', err);
+      }
+      for (const id of movieIds) {
+        try {
+          await deleteMovieFromFirestore(id);
+        } catch {}
+      }
+
+      // 5. Clear selection
+      setSelectedMovieIds((prev) => {
+        const next = new Set(prev);
+        movieIds.forEach((id) => next.delete(id));
+        return next;
+      });
+
+      // 6. Refresh central catalog
+      await onMoviesChanged(movieIds);
+
+      const titleStr = titles.length === 1 ? `"${titles[0]}"` : `${movieIds.length} movie(s)`;
+      showToast(`Permanently deleted ${titleStr}`);
+      setDeleteConfirmation(null);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -551,12 +638,12 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = React.memo(({
 
                       {/* Actions */}
                       <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-2">
                           {/* Publish / Unpublish Button */}
                           {!movie.is_active ? (
                             <button
                               onClick={() => handlePublishMovie(movie)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow transition-all hover:scale-105"
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow transition-all hover:scale-105 active:scale-95 cursor-pointer"
                               title="Publish this movie directly to the live feed for all users"
                             >
                               <Send className="w-3.5 h-3.5" />
@@ -565,29 +652,33 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = React.memo(({
                           ) : (
                             <button
                               onClick={() => handleUnpublishMovie(movie)}
-                              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-amber-400 border border-white/10 transition-colors"
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-amber-400 border border-white/10 transition-colors text-xs font-semibold cursor-pointer"
                               title="Unpublish movie back to Awaiting Publication"
                             >
-                              <EyeOff className="w-4 h-4" />
+                              <EyeOff className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Unpublish</span>
                             </button>
                           )}
 
                           {/* Edit Descriptions Button */}
                           <button
                             onClick={() => openEditModal(movie)}
-                            className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg border border-white/10 transition-colors cursor-pointer"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg border border-white/10 transition-colors cursor-pointer text-xs font-semibold"
                             title="Edit Title, Synopsis, and Descriptions"
                           >
-                            <Edit3 className="w-4 h-4" />
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Edit</span>
                           </button>
 
-                          {/* Single Delete Button (Triggers In-App Modal, NO window.confirm) */}
+                          {/* Explicit Delete Button */}
                           <button
-                            onClick={() => triggerSingleDelete(movie)}
-                            className="p-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 rounded-lg border border-red-800/40 transition-colors cursor-pointer"
-                            title="Permanently delete movie"
+                            onClick={(e) => handleExplicitDeleteClick(e, movie)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/70 hover:bg-red-900 text-red-300 hover:text-white rounded-lg border border-red-800/60 shadow-sm transition-all hover:scale-105 active:scale-95 cursor-pointer text-xs font-semibold group"
+                            title={`Permanently delete "${movie.title}" (Hold Shift for instant delete)`}
+                            aria-label={`Delete ${movie.title}`}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5 text-red-400 group-hover:text-white shrink-0" />
+                            <span>Delete</span>
                           </button>
                         </div>
                       </td>
@@ -624,16 +715,27 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = React.memo(({
 
             <div className="flex gap-3 pt-2">
               <button
+                type="button"
+                disabled={isDeleting}
                 onClick={() => setDeleteConfirmation(null)}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs transition-colors"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
+                type="button"
+                disabled={isDeleting}
                 onClick={executeConfirmedDeletion}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold text-xs shadow-lg shadow-red-700/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold text-xs shadow-lg shadow-red-700/30 transition-all hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
               >
-                Yes, Delete Permanently
+                {isDeleting ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Purging Movie...</span>
+                  </>
+                ) : (
+                  <span>Yes, Delete Permanently</span>
+                )}
               </button>
             </div>
           </div>

@@ -17,12 +17,12 @@ import {
   Sparkles,
   Sliders,
   FileVideo,
-  Download,
   Maximize2,
 } from 'lucide-react';
 import { Movie, DownloadItem, UserProfile, WatchProgress, WatchHistoryItem, RecommendedMovie } from '../types';
 import { recommendationEngine } from '../services/recommendationEngine';
 import { RecommendationPreferencesModal } from './RecommendationPreferencesModal';
+import { SakanetLogo } from './SakanetLogo';
 
 interface BrowseCatalogViewProps {
   movies: Movie[];
@@ -279,14 +279,9 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
         <div className="flex items-center gap-2">
           <button
             onClick={resetFilters}
-            className="flex items-center gap-1.5 focus:outline-none cursor-pointer group text-left"
+            className="focus:outline-none cursor-pointer group text-left"
           >
-            <span className="text-2xl sm:text-3xl font-black font-display tracking-tight text-[#F20D28] group-hover:scale-105 transition-transform duration-200">
-              SAKANET
-            </span>
-            <span className="text-[11px] font-sans font-bold tracking-[0.2em] text-zinc-400 uppercase ml-1">
-              CINEMA
-            </span>
+            <SakanetLogo size="md" />
           </button>
         </div>
 
@@ -410,15 +405,6 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   >
                     <Maximize2 className="w-3.5 h-3.5" />
                     <span>Watch Fullscreen</span>
-                  </button>
-
-                  <button
-                    onClick={() => onDownloadMovie(currentHeroMovie)}
-                    className="flex items-center gap-1.5 bg-neutral-900/80 hover:bg-neutral-800 text-zinc-200 border border-white/[0.08] text-xs font-semibold px-3 py-2 rounded-xl transition-all cursor-pointer"
-                    title="Download to Device Storage"
-                  >
-                    <Download className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="hidden md:inline">Download</span>
                   </button>
 
                   <button
@@ -701,7 +687,6 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                       movie={movie}
                       onSelect={() => onSelectMovie(movie)}
                       onPlay={() => onPlayMovie(movie)}
-                      onDownload={() => onDownloadMovie(movie)}
                     />
                   ))}
                 </div>
@@ -773,7 +758,6 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                             movie={movie}
                             onSelect={() => onSelectMovie(movie)}
                             onPlay={() => onPlayMovie(movie)}
-                            onDownload={() => onDownloadMovie(movie)}
                             matchPercentage={matchPercentage}
                           />
                         </div>
@@ -891,7 +875,6 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                           movie={movie}
                           onSelect={() => onSelectMovie(movie)}
                           onPlay={() => onPlayMovie(movie)}
-                          onDownload={() => onDownloadMovie(movie)}
                         />
                       </div>
                     ))}
@@ -927,7 +910,6 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                           movie={movie}
                           onSelect={() => onSelectMovie(movie)}
                           onPlay={() => onPlayMovie(movie)}
-                          onDownload={() => onDownloadMovie(movie)}
                         />
                       </div>
                     ))}
@@ -1086,7 +1068,6 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                         setSeeAllModal(null);
                         onPlayMovie(movie);
                       }}
-                      onDownload={() => onDownloadMovie(movie)}
                     />
                   )
                 )}
@@ -1193,11 +1174,10 @@ interface MoviePosterCardProps {
   movie: Movie;
   onSelect: () => void;
   onPlay?: () => void;
-  onDownload?: () => void;
   matchPercentage?: number;
 }
 
-const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onSelect, onPlay, onDownload, matchPercentage }) => {
+const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onSelect, onPlay, matchPercentage }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const posterSrc =
     movie.banner_url ||
@@ -1292,19 +1272,6 @@ const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onS
           </span>
 
           <div className="flex items-center gap-2 shrink-0">
-            {onDownload && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDownload();
-                }}
-                className="p-2 rounded-xl bg-white/[0.06] hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-white/[0.08] hover:border-emerald-500/40 transition-all cursor-pointer shadow-sm active:scale-95"
-                title="Download to Phone"
-              >
-                <Download className="w-3.5 h-3.5" />
-              </button>
-            )}
             <button
               type="button"
               onClick={(e) => {

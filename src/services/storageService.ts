@@ -505,6 +505,17 @@ export const storageService = {
     return isInWatchlist;
   },
 
+  // --- DATA CONSUMPTION TRACKING (REALTIME INTERNET DATA USED) ---
+  recordDataConsumption(bytes: number): void {
+    if (!bytes || bytes <= 0) return;
+    try {
+      const user = this.getUser();
+      const mbDelta = bytes / (1024 * 1024);
+      user.download_quota_used_mb = Math.round(((user.download_quota_used_mb || 0) + mbDelta) * 100) / 100;
+      this.saveUser(user);
+    } catch {}
+  },
+
   // --- OFFLINE NETWORK MODE ---
   isOfflineMode(): boolean {
     return localStorage.getItem(STORAGE_KEYS.OFFLINE_MODE) === 'true';

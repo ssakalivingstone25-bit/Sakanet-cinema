@@ -26,7 +26,36 @@ export type OnProgressCallback = (info: DownloadProgressInfo) => void;
 type DownloadListener = (downloads: DownloadItem[]) => void;
 
 /**
+ * Resolve the original movie file name without fail
+ * Strictly prevents turning movie file names into random numbers or timestamps like 00077993
+ */
+export function getOriginalMovieFilename(movie: Movie): string {
+  // 1. Explicit original_filename or filename
+  const explicit = (movie as any).original_filename || movie.filename;
+  if (explicit && typeof explicit === 'string' && explicit.trim() && !explicit.startsWith('movie-')) {
+    const clean = explicit.trim();
+    return clean.includes('.') ? clean : `${clean}.mp4`;
+  }
+  // 2. Extract original filename from stream URL
+  const streamUrl = movie.video_url || movie.file_url || (movie as any).videoUrl || '';
+  if (streamUrl && typeof streamUrl === 'string') {
+    try {
+      const cleanPath = streamUrl.split('?')[0].split('#')[0];
+      const parts = cleanPath.split('/');
+      const last = parts[parts.length - 1];
+      if (last && last.includes('.') && !last.startsWith('movie-') && !/^\d{5,}$/.test(last.replace(/\.[^.]+$/, ''))) {
+        return decodeURIComponent(last);
+      }
+    } catch {}
+  }
+  // 3. User friendly clean title with .mp4
+  const cleanTitle = (movie.title || 'Movie').trim().replace(/[/\\?%*:|"<>]/g, '_').replace(/\s+/g, '_');
+  return cleanTitle.toLowerCase().endsWith('.mp4') ? cleanTitle : `${cleanTitle}.mp4`;
+}
+
+/**
  * Core stream downloader function as specified in Module 1
+ * Consumes real Internet data byte by byte in real-time, calculating exact network throughput
  */
 export async function downloadMovieWithProgress(
   movieUrl: string,
@@ -34,12 +63,39 @@ export async function downloadMovieWithProgress(
   onProgressCallback?: OnProgressCallback,
   signal?: AbortSignal
 ): Promise<Blob> {
-  const response = await fetch(movieUrl, {
-    signal,
-    headers: {
-      Accept: 'video/mp4,video/*;q=0.9,*/*;q=0.8',
-    },
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(movieUrl, {
+      signal,
+      headers: {
+        Accept: 'video/mp4,video/*;q=0.9,*/*;q=0.8',
+      },
+    });
+  } catch (err: any) {
+    if (signal?.aborted) throw err;
+    // Cross-origin fallback: use streaming proxy for genuine chunk transmission
+    if (movieUrl.startsWith('http')) {
+      const proxyUrl = `/api/stream-proxy?url=${encodeURIComponent(movieUrl)}`;
+      response = await fetch(proxyUrl, {
+        signal,
+        headers: { Accept: 'video/mp4,video/*;q=0.9,*/*;q=0.8' },
+      });
+    } else {
+      throw err;
+    }
+  }
+
+  if (!response.ok && movieUrl.startsWith('http')) {
+    const proxyUrl = `/api/stream-proxy?url=${encodeURIComponent(movieUrl)}`;
+    const proxyRes = await fetch(proxyUrl, {
+      signal,
+      headers: { Accept: 'video/mp4,video/*;q=0.9,*/*;q=0.8' },
+    });
+    if (proxyRes.ok) {
+      response = proxyRes;
+    }
+  }
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: Failed to reach movie video stream`);
@@ -68,6 +124,7 @@ export async function downloadMovieWithProgress(
   let bytesReceived = 0;
   let lastTimestamp = performance.now();
   let lastBytes = 0;
+  const overallStart = performance.now();
 
   while (true) {
     const { done, value } = await reader.read();
@@ -76,15 +133,23 @@ export async function downloadMovieWithProgress(
     chunks.push(value);
     bytesReceived += value.length;
 
+    // Record genuine internet data consumption in realtime byte by byte
+    storageService.recordDataConsumption(value.length);
+
     const now = performance.now();
     const timeDelta = (now - lastTimestamp) / 1000;
     let speedMbps = 0;
 
-    if (timeDelta >= 0.25) {
+    if (timeDelta >= 0.2) {
       const bytesDelta = bytesReceived - lastBytes;
-      speedMbps = Math.round((bytesDelta / (1024 * 1024) / timeDelta) * 10) / 10;
+      speedMbps = Math.round(((bytesDelta * 8) / (1024 * 1024) / timeDelta) * 10) / 10;
       lastTimestamp = now;
       lastBytes = bytesReceived;
+    } else {
+      const overallElapsed = (now - overallStart) / 1000;
+      if (overallElapsed > 0.1) {
+        speedMbps = Math.round(((bytesReceived * 8) / (1024 * 1024) / overallElapsed) * 10) / 10;
+      }
     }
 
     const progressPercent = totalBytes > 0
@@ -96,7 +161,7 @@ export async function downloadMovieWithProgress(
       bytesReceived,
       totalBytes: totalBytes > 0 ? totalBytes : bytesReceived,
       progressPercent,
-      speedMbps: speedMbps > 0 ? speedMbps : 12.5,
+      speedMbps: Math.max(0.1, speedMbps),
       isComplete: false,
     });
   }

@@ -267,7 +267,7 @@ export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = React.m
                     <div className="w-full sm:w-56 space-y-1">
                       <div className="flex justify-between text-xs font-mono text-zinc-400">
                         <span className="text-zinc-300">
-                          {isDownloading ? `${item.download_speed_mbps} MB/s` : 'Paused'}
+                          {isDownloading ? `${item.download_speed_mbps} MB/s · ${item.downloaded_mb}MB / ${item.file_size_mb}MB` : 'Paused'}
                         </span>
                         <span>{item.progress}%</span>
                       </div>

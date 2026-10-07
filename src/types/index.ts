@@ -25,6 +25,7 @@ export interface Movie {
   file_url: string; // streaming source alias
   videoUrl?: string; // streamable URL alias
   filename?: string; // disk storage filename
+  original_filename?: string; // exact original uploaded movie file name
   thumbnail_url: string; // poster portrait 2:3
   banner_url: string; // wide hero/landscape 16:9
   download_permission: DownloadPermission;

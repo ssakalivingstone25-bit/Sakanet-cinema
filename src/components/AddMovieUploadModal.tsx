@@ -342,6 +342,7 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
       const movieId = editingMovie
         ? editingMovie.id
         : `movie-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const effectivePoster = posterUrl.trim() || DEFAULT_GENRE_POSTERS[primaryGenre] || DEFAULT_GENRE_POSTERS['Action'] || '';
 
       let savedMovie: Movie;
 
@@ -385,7 +386,6 @@ export const AddMovieUploadModal: React.FC<AddMovieUploadModalProps> = ({
         formData.append('file_size_mb', String(fileSizeMb));
 
         // Attach media URLs with fallback
-        const effectivePoster = posterUrl.trim() || DEFAULT_GENRE_POSTERS[primaryGenre] || DEFAULT_GENRE_POSTERS['Action'];
         formData.append('poster_url', effectivePoster);
         formData.append('banner_url', (backdropUrl || effectivePoster).trim());
         if (videoUrl) formData.append('video_url', videoUrl.trim());

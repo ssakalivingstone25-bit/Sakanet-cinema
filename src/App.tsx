@@ -20,12 +20,15 @@ import { BottomNavBar } from './components/BottomNavBar';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { GoogleAuthModal } from './components/GoogleAuthModal';
 import { AuthGateScreen } from './components/AuthGateScreen';
+import { SakanetLogo } from './components/SakanetLogo';
 import {
   onAuthChange,
   syncUserProfileFromFirebaseUser,
   checkRedirectResult,
   subscribeToFirestoreMovies,
   saveMovieToFirestore,
+  deleteMovieFromFirestore,
+  deleteMultipleMoviesFromFirestore,
 } from './services/firebase';
 import { apiService } from './services/apiService';
 import {
@@ -41,15 +44,17 @@ import {
 
 /**
  * Resilient helper to merge movie catalogs across SQLite, LocalStorage and Cloud Firestore
- * Prevents cloud sync or local refresh from destroying or overwriting movie items.
+ * Prevents cloud sync or local refresh from destroying or overwriting movie items,
+ * while strictly honoring deleted movie tombstones so purged movies never resurrect.
  */
 function mergeMovieList(base: Movie[], incoming: Movie[]): Movie[] {
+  const deletedIds = storageService.getDeletedMovieIds();
   const map = new Map<string, Movie>();
   (base || []).forEach((m) => {
-    if (m && m.id) map.set(m.id, m);
+    if (m && m.id && !deletedIds.has(String(m.id))) map.set(m.id, m);
   });
   (incoming || []).forEach((m) => {
-    if (!m || !m.id) return;
+    if (!m || !m.id || deletedIds.has(String(m.id))) return;
     const prev = map.get(m.id);
     if (!prev) {
       map.set(m.id, m);
@@ -156,8 +161,10 @@ export default function App() {
 
     const unsubscribeFirestore = subscribeToFirestoreMovies((cloudMovies) => {
       if (cloudMovies && Array.isArray(cloudMovies) && cloudMovies.length > 0) {
+        const deletedIds = storageService.getDeletedMovieIds();
+        const activeCloud = cloudMovies.filter((m) => m && m.id && !deletedIds.has(String(m.id)));
         setMovies((prev) => {
-          const merged = mergeMovieList(prev, cloudMovies);
+          const merged = mergeMovieList(prev, activeCloud);
           storageService.saveMovies(merged);
           return merged;
         });
@@ -171,19 +178,88 @@ export default function App() {
     };
   }, []);
 
+  const refreshWatchProgress = useCallback(() => {
+    const list = storageService.getContinueWatchingList();
+    setContinueWatchingList(list);
+  }, []);
+
+  // Central Movie State Deletion Handlers
+  const handleDeleteMovie = useCallback(async (movieId: string) => {
+    // 1. Delete from underlying storageService (also records persistent tombstone)
+    storageService.deleteMovie(movieId);
+
+    // 2. Immediately purge from central movie state
+    setMovies((prev) => prev.filter((m) => m.id !== movieId));
+
+    // 3. Close modals/players if open
+    setSelectedMovie((prev) => (prev?.id === movieId ? null : prev));
+    setPlayingMovie((prev) => (prev?.id === movieId ? null : prev));
+    setMiniPlayer((prev) => (prev?.movie.id === movieId ? null : prev));
+
+    // 4. Delete from SQLite backend server
+    try {
+      await apiService.deleteMovie(movieId);
+    } catch (e) {
+      console.warn('Backend delete error:', e);
+    }
+
+    // 5. Delete from Cloud Firestore
+    try {
+      await deleteMovieFromFirestore(movieId);
+    } catch (e) {
+      console.warn('Firestore delete error:', e);
+    }
+
+    refreshWatchProgress();
+  }, [refreshWatchProgress]);
+
+  const handleDeleteMultipleMovies = useCallback(async (movieIds: string[]) => {
+    const idSet = new Set(movieIds);
+
+    // 1. Delete from underlying storageService
+    storageService.deleteMultipleMovies(movieIds);
+
+    // 2. Immediately purge from central movie state
+    setMovies((prev) => prev.filter((m) => !idSet.has(m.id)));
+
+    // 3. Close modals/players if open
+    setSelectedMovie((prev) => (prev && idSet.has(prev.id) ? null : prev));
+    setPlayingMovie((prev) => (prev && idSet.has(prev.id) ? null : prev));
+    setMiniPlayer((prev) => (prev && idSet.has(prev.movie.id) ? null : prev));
+
+    // 4. Delete from backend SQLite database
+    for (const id of movieIds) {
+      try {
+        await apiService.deleteMovie(id);
+      } catch {}
+    }
+
+    // 5. Delete from Cloud Firestore
+    try {
+      await deleteMultipleMoviesFromFirestore(movieIds);
+    } catch {}
+
+    refreshWatchProgress();
+  }, [refreshWatchProgress]);
+
   const refreshCatalog = useCallback(async () => {
-    // 1. Instant local render
-    const allMovies = storageService.getMovies();
-    setMovies((prev) => mergeMovieList(prev, allMovies));
+    const deletedIds = storageService.getDeletedMovieIds();
+
+    // 1. Instant local render strictly filtering out any deleted movies
+    const allMovies = storageService.getMovies().filter((m) => !deletedIds.has(String(m.id)));
+    setMovies(allMovies);
     setUser(storageService.getUser());
     refreshWatchProgress();
 
-    // 2. Fetch persistent SQLite database from server and merge
+    // 2. Fetch persistent SQLite database from server and merge (ignoring deleted tombstones)
     try {
       const serverMovies = await apiService.getMovies();
       if (Array.isArray(serverMovies) && serverMovies.length > 0) {
+        const validServerMovies = serverMovies.filter(
+          (m) => m && m.id && !deletedIds.has(String(m.id))
+        );
         setMovies((prev) => {
-          const merged = mergeMovieList(prev, serverMovies);
+          const merged = mergeMovieList(prev, validServerMovies);
           storageService.saveMovies(merged);
           return merged;
         });
@@ -192,9 +268,9 @@ export default function App() {
       console.warn('Server movies sync notice:', err);
     }
 
-    // 3. Keep Firestore synchronized with all active movies
+    // 3. Keep Firestore synchronized with active movies
     try {
-      const current = storageService.getMovies();
+      const current = storageService.getMovies().filter((m) => !deletedIds.has(String(m.id)));
       current.forEach((m) => {
         if (m && m.is_active) {
           saveMovieToFirestore(m).catch(() => {});
@@ -207,12 +283,7 @@ export default function App() {
     setSelectedMovie((prev) => (prev && !currentList.some((m) => m.id === prev.id) ? null : prev));
     setPlayingMovie((prev) => (prev && !currentList.some((m) => m.id === prev.id) ? null : prev));
     setMiniPlayer((prev) => (prev && !currentList.some((m) => m.id === prev.movie.id) ? null : prev));
-  }, []);
-
-  const refreshWatchProgress = useCallback(() => {
-    const list = storageService.getContinueWatchingList();
-    setContinueWatchingList(list);
-  }, []);
+  }, [refreshWatchProgress]);
 
   const handleToggleOfflineMode = useCallback((offline: boolean) => {
     storageService.setOfflineMode(offline);
@@ -320,13 +391,19 @@ export default function App() {
   // Session check screen
   if (isAuthChecking) {
     return (
-      <div className="min-h-screen w-full bg-[#070709] flex flex-col items-center justify-center text-white space-y-4 select-none">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center shadow-xl shadow-red-700/30 animate-pulse">
-          <Film className="w-8 h-8 text-white" />
+      <div className="min-h-screen w-full bg-[#070709] flex flex-col items-center justify-center text-white space-y-6 select-none p-4">
+        <div className="relative">
+          {/* Radial ambient glow behind splash logo */}
+          <div className="absolute -inset-4 bg-red-600/20 rounded-full blur-2xl animate-pulse" />
+          <SakanetLogo size="xl" animated={true} />
         </div>
-        <div className="text-center space-y-1">
-          <h2 className="text-lg font-bold font-display tracking-wider text-zinc-100">SAKANET CINEMA</h2>
-          <p className="text-xs text-zinc-500 font-mono">Verifying authentication session...</p>
+        <div className="text-center space-y-1.5">
+          <div className="flex items-center justify-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
+            <p className="text-xs text-zinc-400 font-mono tracking-wide">
+              Loading Cinema Experience...
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -426,6 +503,8 @@ export default function App() {
                   onMoviesChanged={refreshCatalog}
                   onSelectMovie={handleSelectMovie}
                   onNavigateTab={handleTabChange}
+                  onDeleteMovie={handleDeleteMovie}
+                  onDeleteMultipleMovies={handleDeleteMultipleMovies}
                 />
               ) : (
                 <div className="max-w-xl mx-auto my-16 p-8 bg-[#121216] border border-red-500/30 rounded-2xl text-center space-y-4 shadow-2xl">

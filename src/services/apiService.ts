@@ -1,4 +1,5 @@
 import { Movie, UserReview, VJ } from '../types';
+import { storageService } from './storageService';
 
 export const apiService = {
   /**
@@ -104,9 +105,17 @@ export const apiService = {
             let speedMbps = 0;
             if (timeDeltaSec >= 0.2) {
               const loadedDelta = event.loaded - lastLoaded;
+              if (loadedDelta > 0) {
+                storageService.recordDataConsumption(loadedDelta);
+              }
               speedMbps = Math.round(((loadedDelta * 8) / (1024 * 1024) / timeDeltaSec) * 10) / 10;
               lastLoaded = event.loaded;
               lastTime = now;
+            } else {
+              const elapsedTotal = (now - lastTime) / 1000;
+              if (elapsedTotal > 0.1) {
+                speedMbps = Math.round(((event.loaded * 8) / (1024 * 1024) / elapsedTotal) * 10) / 10;
+              }
             }
 
             const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
@@ -114,7 +123,7 @@ export const apiService = {
               loaded: event.loaded,
               total: event.total,
               percent,
-              speedMbps: speedMbps > 0 ? speedMbps : 14.8,
+              speedMbps: Math.max(0.1, speedMbps),
             });
           }
         };
@@ -196,9 +205,12 @@ export const apiService = {
         console.warn(`Chunk ${chunkIndex + 1} transmission notice:`, chunkErr);
       }
 
-      bytesUploaded += (end - start);
+      const chunkBytes = (end - start);
+      bytesUploaded += chunkBytes;
+      storageService.recordDataConsumption(chunkBytes);
+
       const elapsedSec = (performance.now() - startTime) / 1000;
-      const speedMbps = elapsedSec > 0 ? Math.round(((bytesUploaded * 8) / (1024 * 1024) / elapsedSec) * 10) / 10 : 15;
+      const speedMbps = elapsedSec > 0 ? Math.round(((bytesUploaded * 8) / (1024 * 1024) / elapsedSec) * 10) / 10 : 0;
       const percent = Math.min(100, Math.round((bytesUploaded / totalBytes) * 100));
 
       onProgress?.({

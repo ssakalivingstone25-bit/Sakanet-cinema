@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { UserProfile, DownloadItem } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
+import { SakanetLogo } from './SakanetLogo';
 
 interface NavbarProps {
   activeTab: 'settings' | 'browse' | 'downloads' | 'admin';
@@ -54,18 +55,13 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({
       }`}
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-        {/* Zone 1: Brand Wordmark (Single Text Element in Display Face) */}
+        {/* Zone 1: Brand Logo & Wordmark */}
         <div className="flex items-center gap-6">
           <button
             onClick={() => onTabChange('browse')}
-            className="text-2xl font-black font-display tracking-tight text-white flex items-center gap-1.5 focus:outline-none group"
+            className="focus:outline-none group text-left cursor-pointer"
           >
-            <span className="text-red-600 transition-transform group-hover:scale-110 duration-200">
-              SAKANET
-            </span>
-            <span className="text-[10px] font-sans font-semibold tracking-widest text-zinc-500 uppercase ml-1">
-              CINEMA
-            </span>
+            <SakanetLogo size="md" />
           </button>
 
           {/* Zone 2: Clean Text Navigation Links */}

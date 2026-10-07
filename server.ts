@@ -24,10 +24,11 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.mp4';
-    const cleanName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
-    cb(null, `${cleanName}-${uniqueSuffix}${ext}`);
+    // Preserve the exact original movie file name as uploaded by the user
+    // Never append numeric timestamps or random numbers like 00077993
+    const original = file.originalname || 'movie.mp4';
+    const safeName = path.basename(original).replace(/[/\\]/g, '');
+    cb(null, safeName || 'movie.mp4');
   },
 });
 
@@ -108,6 +109,12 @@ app.get(['/movies/:filename', '/uploads/:filename'], (req: Request, res: Respons
 app.use('/movies', express.static(uploadDir));
 app.use('/uploads', express.static(uploadDir));
 
+// Serve Google AdSense verification files (ads.txt and ad.txt)
+app.get(['/ads.txt', '/ad.txt'], (_req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/plain; charset=UTF-8');
+  res.send('google.com, pub-4740792527987743, DIRECT, f08c47fec0942fa0\n');
+});
+
 // 3. Initialize Persistent SQLite Database
 const dbPath = path.join(__dirname, 'database.db');
 const db = new DatabaseSync(dbPath);
@@ -177,7 +184,7 @@ db.exec(`
   );
 `);
 
-// Add uploaded_at, video_url, poster_url columns if database already existed without them
+// Add uploaded_at, video_url, poster_url, original_filename columns if database already existed without them
 try {
   db.exec('ALTER TABLE movies ADD COLUMN uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP');
 } catch {}
@@ -186,6 +193,9 @@ try {
 } catch {}
 try {
   db.exec('ALTER TABLE movies ADD COLUMN poster_url TEXT');
+} catch {}
+try {
+  db.exec('ALTER TABLE movies ADD COLUMN original_filename TEXT');
 } catch {}
 
 // Ensure all uploaded movies are active by default so catalog always shows them
@@ -361,6 +371,8 @@ function formatMovieRecord(row: any) {
     poster_url,
     file_url: video_url,
     videoUrl: video_url, // streamable URL alias
+    filename: row.original_filename || row.filename || (video_url.startsWith('/movies/') ? path.basename(video_url) : ''),
+    original_filename: row.original_filename || row.filename || (video_url.startsWith('/movies/') ? path.basename(video_url) : ''),
     uploadedAt: row.uploaded_at || row.created_at || createdDate,
     thumbnail_url: poster_url,
     banner_url,
@@ -424,7 +436,8 @@ app.post('/api/upload', upload.any(), (req: Request, res: Response) => {
     ).trim();
 
     const id = body.id ? String(body.id) : `movie-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const filename = movieFile ? movieFile.filename : (body.filename || '');
+    const original_filename = movieFile ? movieFile.originalname : (body.original_filename || body.filename || '');
+    const filename = movieFile ? movieFile.filename : (body.filename || original_filename || '');
     const video_url = body.video_url || (movieFile ? `/movies/${movieFile.filename}` : (body.file_url || ''));
     const poster_url = body.poster_url || (posterFile ? `/movies/${posterFile.filename}` : (body.thumbnail_url || ''));
     const file_url = video_url;
@@ -463,7 +476,7 @@ app.post('/api/upload', upload.any(), (req: Request, res: Response) => {
           title = ?, original_title = ?, synopsis = ?, genre = ?, release_year = ?,
           duration_minutes = ?, age_rating = ?, vj_name = ?, vj_avatar_url = ?, vj_bio = ?,
           director = ?, cast = ?, keywords = ?, video_url = ?, poster_url = ?, thumbnail_url = ?, banner_url = ?,
-          file_url = ?, filename = ?, file_size_mb = ?, is_active = ?, is_featured = ?,
+          file_url = ?, filename = ?, original_filename = ?, file_size_mb = ?, is_active = ?, is_featured = ?,
           is_trending = ?, is_recently_added = ?
          WHERE id = ?`
       ).run(
@@ -486,6 +499,7 @@ app.post('/api/upload', upload.any(), (req: Request, res: Response) => {
         banner_url || existing.banner_url,
         file_url || existing.file_url,
         filename || existing.filename,
+        original_filename || existing.original_filename || filename,
         file_size_mb,
         is_active,
         is_featured,
@@ -498,10 +512,10 @@ app.post('/api/upload', upload.any(), (req: Request, res: Response) => {
         `INSERT INTO movies (
           id, title, original_title, synopsis, genre, release_year, duration_minutes,
           age_rating, vj_name, vj_avatar_url, vj_bio, director, cast, keywords,
-          video_url, poster_url, thumbnail_url, banner_url, file_url, filename, file_size_mb, video_qualities,
+          video_url, poster_url, thumbnail_url, banner_url, file_url, filename, original_filename, file_size_mb, video_qualities,
           audio_tracks, subtitles, rating, review_count, is_active, is_featured,
           is_trending, is_recently_added, download_permission, uploaded_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 5.0, 0, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 5.0, 0, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
       ).run(
         id,
         title,
@@ -523,6 +537,7 @@ app.post('/api/upload', upload.any(), (req: Request, res: Response) => {
         banner_url,
         file_url,
         filename,
+        original_filename || filename,
         file_size_mb,
         video_qualities,
         audio_tracks,
@@ -605,14 +620,18 @@ app.post('/api/upload-chunk', upload.single('chunk'), (req: Request, res: Respon
 app.post('/api/upload-complete', (req: Request, res: Response) => {
   try {
     const { uploadId, originalName, title, ...body } = req.body;
-    const ext = path.extname(originalName || '') || '.mp4';
-    const cleanName = path.basename(originalName || 'movie', ext).replace(/[^a-zA-Z0-9_-]/g, '_');
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
-    const finalFilename = `${cleanName}-${uniqueSuffix}${ext}`;
+    // Retain the exact original movie file name - no numbers or suffixes appended
+    const rawName = originalName || 'movie.mp4';
+    const finalFilename = path.basename(rawName).replace(/[/\\]/g, '') || 'movie.mp4';
     const finalFilePath = path.join(uploadDir, finalFilename);
 
     const tempFilePath = path.join(uploadDir, `tmp_${uploadId}.part`);
     if (fs.existsSync(tempFilePath)) {
+      if (fs.existsSync(finalFilePath)) {
+        try {
+          fs.unlinkSync(finalFilePath);
+        } catch {}
+      }
       fs.renameSync(tempFilePath, finalFilePath);
     }
 
@@ -622,7 +641,8 @@ app.post('/api/upload-complete', (req: Request, res: Response) => {
       ? Math.round((fs.statSync(finalFilePath).size / (1024 * 1024)) * 10) / 10
       : Number(body.file_size_mb) || 850;
 
-    const movieTitle = (title || cleanName.replace(/[_-]/g, ' ') || 'Untitled Movie').trim();
+    const baseMovieTitle = path.basename(rawName, path.extname(rawName)).replace(/[_-]/g, ' ');
+    const movieTitle = (title || baseMovieTitle || 'Untitled Movie').trim();
     const movieGenre = body.genre || 'Action';
     const defaultPoster = DEFAULT_GENRE_POSTERS_MAP[movieGenre] || DEFAULT_GENRE_POSTERS_MAP['Action'];
     const poster_url = body.poster_url || body.thumbnail_url || defaultPoster;
@@ -635,10 +655,10 @@ app.post('/api/upload-complete', (req: Request, res: Response) => {
       `INSERT INTO movies (
         id, title, original_title, synopsis, genre, release_year, duration_minutes,
         age_rating, vj_name, vj_avatar_url, vj_bio, director, cast, keywords,
-        video_url, poster_url, thumbnail_url, banner_url, file_url, filename, file_size_mb, video_qualities,
+        video_url, poster_url, thumbnail_url, banner_url, file_url, filename, original_filename, file_size_mb, video_qualities,
         audio_tracks, subtitles, rating, review_count, is_active, is_featured,
         is_trending, is_recently_added, download_permission
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         original_title = excluded.original_title,
@@ -659,6 +679,7 @@ app.post('/api/upload-complete', (req: Request, res: Response) => {
         banner_url = excluded.banner_url,
         file_url = excluded.file_url,
         filename = excluded.filename,
+        original_filename = excluded.original_filename,
         file_size_mb = excluded.file_size_mb,
         is_active = excluded.is_active,
         is_featured = excluded.is_featured,
@@ -686,6 +707,7 @@ app.post('/api/upload-complete', (req: Request, res: Response) => {
       banner_url,
       video_url,
       finalFilename,
+      rawName || finalFilename,
       fileSizeMb,
       JSON.stringify(body.video_qualities || ['1080p FHD', '720p HD']),
       JSON.stringify(body.audio_tracks || ['Luganda [VJ Translation]', 'English [Stereo]']),
@@ -920,29 +942,131 @@ app.put('/api/movies/:id', (req: Request, res: Response) => {
   }
 });
 
-// Delete movie and its local video file
+// Delete movie and its local video and image files from uploads
 app.delete('/api/movies/:id', (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(id) as any;
 
     if (movie) {
-      if (movie.filename) {
-        const filePath = path.join(uploadDir, movie.filename);
+      // Find all possible local files linked to this movie
+      const candidateFiles = new Set<string>();
+      if (movie.filename) candidateFiles.add(movie.filename);
+
+      const checkUrlForFilename = (url?: string) => {
+        if (!url || typeof url !== 'string') return;
+        if (url.startsWith('http://') || url.startsWith('https://')) return;
+        const base = path.basename(url);
+        if (base && !base.includes('..')) {
+          candidateFiles.add(base);
+        }
+      };
+
+      checkUrlForFilename(movie.video_url);
+      checkUrlForFilename(movie.file_url);
+      checkUrlForFilename(movie.poster_url);
+      checkUrlForFilename(movie.thumbnail_url);
+      checkUrlForFilename(movie.banner_url);
+
+      for (const fname of candidateFiles) {
+        const filePath = path.join(uploadDir, fname);
         if (fs.existsSync(filePath)) {
           try {
             fs.unlinkSync(filePath);
-          } catch {}
+            console.log(`Deleted associated media file on disk: ${filePath}`);
+          } catch (err) {
+            console.warn(`Could not unlink file ${filePath}:`, err);
+          }
         }
       }
+
       db.prepare('DELETE FROM reviews WHERE movie_id = ?').run(id);
       db.prepare('DELETE FROM movies WHERE id = ?').run(id);
     }
 
-    res.json({ success: true, message: 'Movie deleted permanently' });
+    res.json({ success: true, message: 'Movie and media files permanently deleted' });
   } catch (error) {
     console.error('Delete movie error:', error);
     res.status(500).json({ error: 'Failed to delete movie' });
+  }
+});
+
+// Explicit file deletion endpoint for uploads directory
+app.delete(['/api/files/:filename', '/api/uploads/:filename', '/uploads/:filename'], (req: Request, res: Response) => {
+  try {
+    const rawFilename = req.params.filename;
+    const filename = path.basename(decodeURIComponent(rawFilename));
+    const filePath = path.join(uploadDir, filename);
+
+    let fileDeleted = false;
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+        fileDeleted = true;
+      } catch (err) {
+        console.warn('Failed to unlink file:', filePath, err);
+      }
+    }
+
+    // Clean up any database records referencing this file
+    const affected = db.prepare(
+      `SELECT id FROM movies WHERE filename = ? OR video_url LIKE ? OR file_url LIKE ?`
+    ).all(filename, `%${filename}%`, `%${filename}%`) as any[];
+
+    for (const m of affected) {
+      db.prepare('DELETE FROM reviews WHERE movie_id = ?').run(m.id);
+      db.prepare('DELETE FROM movies WHERE id = ?').run(m.id);
+    }
+
+    res.json({
+      success: true,
+      message: `File ${filename} deleted successfully`,
+      fileDeleted,
+      affectedMoviesCount: affected.length,
+    });
+  } catch (error) {
+    console.error('Delete file error:', error);
+    res.status(500).json({ error: 'Failed to delete file' });
+  }
+});
+
+// Real-Time Streaming Download Proxy (Bypasses CORS restrictions and streams true chunks for realtime data consumption)
+app.get('/api/stream-proxy', async (req: Request, res: Response) => {
+  const targetUrl = req.query.url as string;
+  if (!targetUrl || !targetUrl.startsWith('http')) {
+    return res.status(400).json({ error: 'Invalid stream target URL' });
+  }
+
+  try {
+    const upstreamRes = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Sakanet-Cinema-Stream/1.0',
+        ...(req.headers.range ? { Range: req.headers.range } : {}),
+      },
+    });
+
+    res.status(upstreamRes.status);
+    const passHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges'];
+    passHeaders.forEach((h) => {
+      const val = upstreamRes.headers.get(h);
+      if (val) res.setHeader(h, val);
+    });
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
+
+    if (!upstreamRes.body) {
+      return res.end();
+    }
+
+    const { Readable } = await import('node:stream');
+    // @ts-ignore
+    const nodeStream = Readable.fromWeb(upstreamRes.body);
+    nodeStream.pipe(res);
+  } catch (err: any) {
+    console.error('Stream proxy error:', err);
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'Failed to proxy movie stream' });
+    }
   }
 });
 
