@@ -261,26 +261,6 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
               </button>
 
               <button
-                onClick={handleStartDownload}
-                className={`flex items-center gap-2 text-sm font-medium px-4 py-2.5 rounded-lg border transition-all ${
-                  isCompleted
-                    ? 'border-emerald-500/60 bg-emerald-950/60 text-emerald-300'
-                    : isDownloading
-                    ? 'border-amber-500/60 bg-amber-950/60 text-amber-300'
-                    : 'border-white/20 bg-zinc-900/80 text-white hover:border-red-500'
-                }`}
-              >
-                <Download className="w-4 h-4" />
-                <span>
-                  {isCompleted
-                    ? 'Offline Ready'
-                    : isDownloading
-                    ? `${downloadItem?.progress}%`
-                    : 'Download'}
-                </span>
-              </button>
-
-              <button
                 onClick={() => onToggleWatchlist(movie.id)}
                 title="My List"
                 className={`w-10 h-10 rounded-lg border flex items-center justify-center transition-all ${

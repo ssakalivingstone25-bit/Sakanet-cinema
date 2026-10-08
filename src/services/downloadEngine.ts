@@ -259,7 +259,7 @@ class RealTimeStreamDownloadManager {
       error_message: undefined,
     });
 
-    const safeFilename = `${movie.title.replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_')}.mp4`;
+    const safeFilename = getOriginalMovieFilename(movie);
 
     try {
       const targetUrl = movie.video_url || movie.file_url || (movie as any).videoUrl || '';

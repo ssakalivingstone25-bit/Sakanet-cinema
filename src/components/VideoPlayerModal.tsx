@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { Movie } from '../types';
 import { storageService } from '../services/storageService';
-import { downloadEngine } from '../services/downloadEngine';
+import { downloadEngine, getOriginalMovieFilename } from '../services/downloadEngine';
 import { storageEngine } from '../services/storageEngine';
 import { mediaDB } from '../services/mediaDB';
 
@@ -236,7 +236,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     if (!movie) return;
     setShowDownloadDropdown(false);
 
-    const safeFilename = `${movie.title.replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_')}.mp4`;
+    const safeFilename = getOriginalMovieFilename(movie);
     const targetUrl = streamSrc || movie.video_url || movie.file_url;
 
     if (!targetUrl) {

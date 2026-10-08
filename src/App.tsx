@@ -391,18 +391,27 @@ export default function App() {
   // Session check screen
   if (isAuthChecking) {
     return (
-      <div className="min-h-screen w-full bg-[#070709] flex flex-col items-center justify-center text-white space-y-6 select-none p-4">
-        <div className="relative">
-          {/* Radial ambient glow behind splash logo */}
-          <div className="absolute -inset-4 bg-red-600/20 rounded-full blur-2xl animate-pulse" />
-          <SakanetLogo size="xl" animated={true} />
-        </div>
-        <div className="text-center space-y-1.5">
-          <div className="flex items-center justify-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
-            <p className="text-xs text-zinc-400 font-mono tracking-wide">
-              Loading Cinema Experience...
+      <div className="min-h-screen w-full bg-[#070709] flex flex-col items-center justify-center text-white space-y-6 select-none p-6 relative overflow-hidden">
+        {/* Cinematic Backdrop Glow */}
+        <div className="absolute w-96 h-96 rounded-full bg-[radial-gradient(circle,rgba(229,9,20,0.18)_0%,transparent_70%)] blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center">
+          <div className="relative">
+            {/* Radial ambient glow behind splash logo */}
+            <div className="absolute -inset-6 bg-red-600/25 rounded-full blur-2xl animate-pulse" />
+            <SakanetLogo size="xl" animated={true} />
+          </div>
+
+          <div className="text-center mt-6 space-y-2">
+            <p className="text-xs sm:text-sm font-semibold tracking-widest uppercase text-red-500 font-sans">
+              Uganda's Premier VJ Cinema &amp; Streaming
             </p>
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
+              <p className="text-xs text-zinc-400 font-mono tracking-wide">
+                Initializing Cinema Hub...
+              </p>
+            </div>
           </div>
         </div>
       </div>

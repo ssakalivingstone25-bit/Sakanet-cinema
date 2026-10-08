@@ -11,12 +11,14 @@ import { UserProfile } from '../types';
 import { signInWithGoogle, signInWithGoogleRedirect } from '../services/firebase';
 import { storageService } from '../services/storageService';
 import { SakanetLogo } from './SakanetLogo';
+import { InfoPageTab } from './InfoPagesModal';
 
 interface AuthGateScreenProps {
   onAuthenticated: (user: UserProfile) => void;
+  onOpenInfoTab?: (tab: InfoPageTab) => void;
 }
 
-export const AuthGateScreen: React.FC<AuthGateScreenProps> = ({ onAuthenticated }) => {
+export const AuthGateScreen: React.FC<AuthGateScreenProps> = ({ onAuthenticated, onOpenInfoTab }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDomainHelp, setShowDomainHelp] = useState(false);
@@ -175,19 +177,69 @@ export const AuthGateScreen: React.FC<AuthGateScreenProps> = ({ onAuthenticated 
 
           <div className="pt-2 border-t border-white/5 text-center">
             <p className="text-[11px] text-zinc-500 leading-relaxed">
-              By signing in, you agree to Sakanet Cinema Terms of Service and Privacy Policy.
+              By signing in, you agree to Sakanet Cinema{' '}
+              <button
+                type="button"
+                onClick={() => onOpenInfoTab?.('terms')}
+                className="text-red-400 hover:text-red-300 underline font-medium cursor-pointer"
+              >
+                Terms of Service
+              </button>{' '}
+              and{' '}
+              <button
+                type="button"
+                onClick={() => onOpenInfoTab?.('privacy')}
+                className="text-red-400 hover:text-red-300 underline font-medium cursor-pointer"
+              >
+                Privacy Policy
+              </button>.
             </p>
           </div>
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 w-full px-6 py-5 max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between text-xs text-zinc-500 border-t border-white/5">
+      {/* Footer (Accessible links for Google AdSense Reviewers & Crawlers) */}
+      <footer className="relative z-10 w-full px-6 py-5 max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between text-xs text-zinc-400 border-t border-white/5 gap-3">
         <div className="flex items-center gap-2">
           <span>Authentication powered by Google OAuth 2.0</span>
         </div>
-        <div className="mt-2 sm:mt-0 font-mono text-[11px]">
-          &copy; {new Date().getFullYear()} Sakanet Cinema. All rights reserved.
+
+        <div className="flex items-center gap-4 text-xs">
+          <button
+            type="button"
+            onClick={() => onOpenInfoTab?.('privacy')}
+            className="hover:text-white transition-colors cursor-pointer"
+          >
+            Privacy Policy
+          </button>
+          <span>•</span>
+          <button
+            type="button"
+            onClick={() => onOpenInfoTab?.('terms')}
+            className="hover:text-white transition-colors cursor-pointer"
+          >
+            Terms of Service
+          </button>
+          <span>•</span>
+          <button
+            type="button"
+            onClick={() => onOpenInfoTab?.('about')}
+            className="hover:text-white transition-colors cursor-pointer"
+          >
+            About Us
+          </button>
+          <span>•</span>
+          <button
+            type="button"
+            onClick={() => onOpenInfoTab?.('contact')}
+            className="hover:text-white transition-colors cursor-pointer"
+          >
+            Contact Us
+          </button>
+        </div>
+
+        <div className="font-mono text-[11px] text-zinc-500">
+          &copy; {new Date().getFullYear()} Sakanet Cinema (Publisher: pub-4740792527987743)
         </div>
       </footer>
     </div>

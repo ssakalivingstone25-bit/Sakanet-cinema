@@ -11,10 +11,15 @@ import {
   Shield,
   Layers,
   Sparkles,
+  FileText,
+  Mail,
+  HelpCircle,
+  ChevronDown,
 } from 'lucide-react';
 import { UserProfile, DownloadItem } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
 import { SakanetLogo } from './SakanetLogo';
+import { InfoPageTab } from './InfoPagesModal';
 
 interface NavbarProps {
   activeTab: 'settings' | 'browse' | 'downloads' | 'admin';
@@ -28,6 +33,7 @@ interface NavbarProps {
   searchTerm: string;
   onSearchChange: (q: string) => void;
   onOpenAuth: () => void;
+  onOpenInfoTab?: (tab: InfoPageTab) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = React.memo(({
@@ -42,8 +48,10 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({
   searchTerm,
   onSearchChange,
   onOpenAuth,
+  onOpenInfoTab,
 }) => {
   const [showSearch, setShowSearch] = useState(false);
+  const [showLegalMenu, setShowLegalMenu] = useState(false);
 
   const activeDownloads = downloads.filter((d) => d.status === 'downloading');
   const completedDownloads = downloads.filter((d) => d.status === 'completed');
@@ -116,6 +124,68 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({
                 <span>Admin Portal</span>
               </button>
             )}
+
+            {/* Info & Legal Menu (Google AdSense Required Links) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowLegalMenu(!showLegalMenu)}
+                className="transition-colors hover:text-white py-1 text-zinc-400 flex items-center gap-1 cursor-pointer"
+                title="Privacy Policy, Terms of Service, About Us & Contact"
+              >
+                <span>Info &amp; Legal</span>
+                <ChevronDown className="w-3 h-3 opacity-70" />
+              </button>
+
+              {showLegalMenu && (
+                <div className="absolute left-0 mt-2 w-48 bg-[#121319] border border-white/10 rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLegalMenu(false);
+                      onOpenInfoTab?.('privacy');
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs text-zinc-300 hover:text-white hover:bg-white/5 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-red-500" />
+                    <span>Privacy Policy</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLegalMenu(false);
+                      onOpenInfoTab?.('terms');
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs text-zinc-300 hover:text-white hover:bg-white/5 flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-red-500" />
+                    <span>Terms of Service</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLegalMenu(false);
+                      onOpenInfoTab?.('about');
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs text-zinc-300 hover:text-white hover:bg-white/5 flex items-center gap-2 cursor-pointer"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5 text-red-500" />
+                    <span>About Us</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLegalMenu(false);
+                      onOpenInfoTab?.('contact');
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs text-zinc-300 hover:text-white hover:bg-white/5 flex items-center gap-2 cursor-pointer border-t border-white/5"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-red-500" />
+                    <span>Contact Us</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </nav>
         </div>
 

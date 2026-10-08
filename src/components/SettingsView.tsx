@@ -13,8 +13,12 @@ import {
   Film,
   Play,
   Star,
+  Wifi,
+  HardDrive,
+  RefreshCw,
 } from 'lucide-react';
 import { UserProfile, DownloadItem } from '../types';
+import { storageService } from '../services/storageService';
 
 interface SettingsViewProps {
   user?: UserProfile;
@@ -27,7 +31,7 @@ interface SettingsViewProps {
 
 export type ThemeOption = 'dark' | 'light' | 'system';
 
-export const SettingsView: React.FC<SettingsViewProps> = React.memo(() => {
+export const SettingsView: React.FC<SettingsViewProps> = React.memo(({ user }) => {
   // Theme state
   const [theme, setTheme] = useState<ThemeOption>(() => {
     return (localStorage.getItem('sakanet_theme') as ThemeOption) || 'dark';
@@ -42,6 +46,21 @@ export const SettingsView: React.FC<SettingsViewProps> = React.memo(() => {
   const [highContrast, setHighContrast] = useState<boolean>(() => {
     return localStorage.getItem('sakanet_high_contrast') === 'true';
   });
+
+  // Realtime Internet Data Consumption Tracking
+  const [dataUsedMb, setDataUsedMb] = useState<number>(() => {
+    return storageService.getUser().download_quota_used_mb || 0;
+  });
+
+  useEffect(() => {
+    const updateQuota = () => {
+      const current = storageService.getUser().download_quota_used_mb || 0;
+      setDataUsedMb(current);
+    };
+    updateQuota();
+    const interval = setInterval(updateQuota, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -351,6 +370,82 @@ export const SettingsView: React.FC<SettingsViewProps> = React.memo(() => {
                   }`}
                 />
               </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ========================================================
+            REALTIME INTERNET DATA CONSUMPTION (Live Byte Tracking)
+           ======================================================== */}
+        <section className="bg-[#121319] border border-white/10 rounded-2xl p-5 sm:p-7 shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-red-950/80 border border-red-500/40 flex items-center justify-center text-[#E50914] shadow-md">
+                <Wifi className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                  <span>Internet Data Consumption</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                </h2>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Real-time network data used during video streaming, chunk uploads, and phone downloads.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const u = storageService.getUser();
+                u.download_quota_used_mb = 0;
+                storageService.saveUser(u);
+                setDataUsedMb(0);
+                showToast('Internet data consumption counter reset');
+              }}
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 border border-white/10 transition-colors cursor-pointer"
+              title="Reset data usage counter"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Reset Counter</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-2">
+            <div className="bg-black/40 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
+              <span className="text-xs text-zinc-400 font-medium">Data Used (Session & Total)</span>
+              <div className="mt-2 flex items-baseline gap-1.5">
+                <span className="text-2xl font-extrabold font-display text-white tracking-tight">
+                  {dataUsedMb > 1024 ? (dataUsedMb / 1024).toFixed(2) : dataUsedMb.toFixed(1)}
+                </span>
+                <span className="text-xs font-bold text-[#E50914]">
+                  {dataUsedMb > 1024 ? 'GB' : 'MB'}
+                </span>
+              </div>
+              <span className="text-[10px] text-zinc-500 mt-1 font-mono">Consumes data in real-time</span>
+            </div>
+
+            <div className="bg-black/40 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
+              <span className="text-xs text-zinc-400 font-medium">Network Data Quota</span>
+              <div className="mt-2 flex items-baseline gap-1.5">
+                <span className="text-2xl font-extrabold font-display text-white tracking-tight">
+                  {(user?.download_quota_limit_mb || 25000) > 1024
+                    ? `${Math.round((user?.download_quota_limit_mb || 25000) / 1024)}`
+                    : `${user?.download_quota_limit_mb || 25000}`}
+                </span>
+                <span className="text-xs font-bold text-zinc-400">GB Allowed</span>
+              </div>
+              <span className="text-[10px] text-emerald-400 mt-1 font-medium">High-speed tier active</span>
+            </div>
+
+            <div className="bg-black/40 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
+              <span className="text-xs text-zinc-400 font-medium">Transfer Protocol</span>
+              <div className="mt-2 flex items-baseline gap-1.5">
+                <span className="text-base font-bold text-zinc-200">
+                  HTTP/2 206
+                </span>
+              </div>
+              <span className="text-[10px] text-zinc-400 mt-1">Chunk-based stream caching</span>
             </div>
           </div>
         </section>

@@ -680,7 +680,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
                   {filteredMovies.map((movie) => (
                     <MoviePosterCard
                       key={movie.id}
@@ -695,20 +695,20 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
           ) : (
             <>
               {!isHeavyContentReady ? (
-                <div className="space-y-8 animate-in fade-in duration-150 py-2">
-                  <div className="space-y-3">
-                    <div className="h-5 w-44 bg-neutral-800/60 rounded-md animate-pulse" />
-                    <div className="flex gap-4 overflow-hidden">
-                      {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="w-52 sm:w-60 aspect-[16/10] bg-neutral-900/80 border border-white/[0.08] rounded-2xl animate-pulse shrink-0" />
+                <div className="space-y-6 animate-in fade-in duration-150 py-2">
+                  <div className="space-y-2.5">
+                    <div className="h-4 w-36 bg-neutral-800/60 rounded-md animate-pulse" />
+                    <div className="flex gap-2.5 overflow-hidden">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="w-[98px] sm:w-[120px] aspect-[2/3] bg-neutral-900/80 border border-white/[0.08] rounded-xl animate-pulse shrink-0" />
                       ))}
                     </div>
                   </div>
-                  <div className="space-y-3">
-                    <div className="h-5 w-36 bg-neutral-800/60 rounded-md animate-pulse" />
-                    <div className="flex gap-4 overflow-hidden">
-                      {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="w-52 sm:w-60 aspect-[16/10] bg-neutral-900/80 border border-white/[0.08] rounded-2xl animate-pulse shrink-0" />
+                  <div className="space-y-2.5">
+                    <div className="h-4 w-32 bg-neutral-800/60 rounded-md animate-pulse" />
+                    <div className="flex gap-2.5 overflow-hidden">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="w-[98px] sm:w-[120px] aspect-[2/3] bg-neutral-900/80 border border-white/[0.08] rounded-xl animate-pulse shrink-0" />
                       ))}
                     </div>
                   </div>
@@ -752,7 +752,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   {/* Horizontal Recommended Movies Rail with Match Badges and Reasons */}
                   <HorizontalScrollRail>
                     {recommendedList.slice(0, 10).map(({ movie, matchPercentage, reason }) => (
-                      <div key={movie.id} className="shrink-0 w-60 sm:w-68 flex flex-col justify-between group">
+                      <div key={movie.id} className="shrink-0 w-[98px] sm:w-[120px] md:w-[136px] flex flex-col justify-between group">
                         <div className="relative flex-1">
                           <MoviePosterCard
                             movie={movie}
@@ -870,7 +870,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   {/* Horizontal Movie Rail */}
                   <HorizontalScrollRail>
                     {trendingMovies.slice(0, 10).map((movie) => (
-                      <div key={movie.id} className="shrink-0 w-60 sm:w-68 flex flex-col justify-between">
+                      <div key={movie.id} className="shrink-0 w-[98px] sm:w-[120px] md:w-[136px] flex flex-col justify-between">
                         <MoviePosterCard
                           movie={movie}
                           onSelect={() => onSelectMovie(movie)}
@@ -905,7 +905,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                   {/* Horizontal Movie Rail */}
                   <HorizontalScrollRail>
                     {recentlyAddedMovies.slice(0, 10).map((movie) => (
-                      <div key={movie.id} className="shrink-0 w-60 sm:w-68 flex flex-col justify-between">
+                      <div key={movie.id} className="shrink-0 w-[98px] sm:w-[120px] md:w-[136px] flex flex-col justify-between">
                         <MoviePosterCard
                           movie={movie}
                           onSelect={() => onSelectMovie(movie)}
@@ -934,9 +934,9 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                       <div
                         key={movie.id}
                         onClick={() => onPlayMovie(movie)}
-                        className="shrink-0 w-60 sm:w-68 cursor-pointer group bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md border border-white/[0.08] hover:border-red-500/50 rounded-2xl p-4 sm:p-5 overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] will-change-transform relative flex flex-col justify-between before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/[0.12] before:to-transparent"
+                        className="shrink-0 w-44 sm:w-56 cursor-pointer group bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md border border-white/[0.08] hover:border-red-500/50 rounded-xl p-2 sm:p-2.5 overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] shadow-md will-change-transform relative flex flex-col justify-between"
                       >
-                        <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-neutral-950 border border-white/[0.06] shadow-inner">
+                        <div className="relative aspect-[16/9] w-full rounded-lg overflow-hidden bg-neutral-950 border border-white/[0.06] shadow-inner">
                           <img
                             src={movie.banner_url || movie.thumbnail_url}
                             alt={movie.title}
@@ -1054,7 +1054,7 @@ export const BrowseCatalogView: React.FC<BrowseCatalogViewProps> = React.memo(({
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
                 {(seeAllModal === 'trending' ? trendingMovies : recentlyAddedMovies).map(
                   (movie) => (
                     <MoviePosterCard
@@ -1168,7 +1168,8 @@ const HorizontalScrollRail: React.FC<HorizontalScrollRailProps> = ({ children, c
 };
 
 // ========================================================
-// MOVIE POSTER CARD (Contained Cinema Master File Preview Style)
+// MOVIE POSTER CARD (Compact Portrait Cinema Poster Format)
+// High visibility: allows 3+ movies to fit on mobile viewports
 // ========================================================
 interface MoviePosterCardProps {
   movie: Movie;
@@ -1180,23 +1181,23 @@ interface MoviePosterCardProps {
 const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onSelect, onPlay, matchPercentage }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const posterSrc =
-    movie.banner_url ||
-    movie.thumbnail_url ||
     movie.poster_url ||
+    movie.thumbnail_url ||
+    movie.banner_url ||
     DEFAULT_GENRE_POSTERS[movie.genre] ||
     DEFAULT_GENRE_POSTERS['Action'];
 
   return (
     <div
       onClick={onSelect}
-      className="group relative flex flex-col justify-between rounded-2xl border border-white/[0.08] hover:border-red-500/50 focus-within:border-red-500/50 bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] p-4 sm:p-5 transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] cursor-pointer text-left select-none will-change-transform overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/[0.15] before:to-transparent h-full"
+      className="group relative flex flex-col justify-between rounded-xl border border-white/[0.08] hover:border-red-500/50 focus-within:border-red-500/50 bg-gradient-to-b from-neutral-900/90 to-neutral-950/95 backdrop-blur-md shadow-md hover:shadow-red-950/30 p-1.5 sm:p-2 transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] cursor-pointer text-left select-none will-change-transform overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/[0.15] before:to-transparent h-full"
       style={{ transform: 'translate3d(0, 0, 0)' }}
     >
-      {/* Contained Media Preview Frame (Fixed Aspect Ratio to Eliminate CLS) */}
-      <div className="relative aspect-[16/10] w-full rounded-xl overflow-hidden bg-neutral-950 border border-white/[0.06] shrink-0 shadow-inner">
+      {/* Contained Media Preview Frame (Vertical Portrait 2:3 Ratio) */}
+      <div className="relative aspect-[2/3] w-full rounded-lg overflow-hidden bg-neutral-950 border border-white/[0.06] shrink-0 shadow-inner">
         {!imageLoaded && (
           <div className="absolute inset-0 bg-neutral-900/80 animate-pulse flex items-center justify-center">
-            <Film className="w-6 h-6 text-neutral-600 animate-pulse" />
+            <Film className="w-5 h-5 text-neutral-600 animate-pulse" />
           </div>
         )}
         <img
@@ -1222,70 +1223,51 @@ const MoviePosterCard: React.FC<MoviePosterCardProps> = React.memo(({ movie, onS
                 onPlay();
               }
             }}
-            className="w-11 h-11 rounded-full bg-[#E50914] text-white flex items-center justify-center shadow-[0_0_24px_rgba(229,9,20,0.6)] hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+            className="w-8 h-8 rounded-full bg-[#E50914] text-white flex items-center justify-center shadow-[0_0_16px_rgba(229,9,20,0.6)] hover:scale-110 active:scale-95 transition-transform cursor-pointer"
             title="Play Movie"
           >
-            <Play className="w-5 h-5 fill-white ml-0.5" />
+            <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
           </button>
         </div>
 
-        {/* Top Media Tags */}
-        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 pointer-events-none">
-          {matchPercentage !== undefined && (
-            <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-red-400 border border-red-500/30 shadow-sm flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-red-500" />
-              <span>{matchPercentage}% Match</span>
+        {/* Top Badges */}
+        <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center justify-between pointer-events-none">
+          {matchPercentage !== undefined ? (
+            <span className="bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-bold text-red-400 border border-red-500/30 flex items-center gap-0.5">
+              <Sparkles className="w-2.5 h-2.5 text-red-500" />
+              <span>{matchPercentage}%</span>
+            </span>
+          ) : (
+            <span className="bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-semibold text-zinc-300 border border-white/10">
+              HD
             </span>
           )}
-          <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-zinc-200 border border-white/10 shadow-sm">
-            1080p FHD
+          <span className="bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-bold text-amber-400 border border-amber-500/30">
+            ★ {movie.rating || 5.0}
           </span>
         </div>
 
-        {/* Bottom Size / Stream Pill */}
-        <div className="absolute bottom-2.5 right-2.5 pointer-events-none">
-          <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-zinc-300 border border-white/10 shadow-sm">
-            {movie.file_size_mb ? `${movie.file_size_mb} MB` : 'Stream'}
+        {/* Bottom Stream / Size Pill */}
+        <div className="absolute bottom-1.5 right-1.5 pointer-events-none">
+          <span className="bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded text-[8px] font-mono font-medium text-zinc-300 border border-white/10">
+            {movie.file_size_mb ? `${Math.round(movie.file_size_mb)}MB` : '1080p'}
           </span>
         </div>
       </div>
 
       {/* Card Info Details */}
-      <div className="pt-3.5 space-y-2 text-left flex-1 flex flex-col justify-between">
+      <div className="pt-2 text-left flex-1 flex flex-col justify-between">
         <div>
-          <div className="flex items-center justify-between text-xs text-zinc-400 font-medium">
-            <span className="text-[#E50914] font-bold tracking-tight truncate max-w-[130px]">
-              {movie.vj_name || 'VJ Junior'}
-            </span>
-            <span className="text-zinc-400 font-mono text-[11px] font-semibold">{movie.release_year}</span>
-          </div>
-
-          <h4 className="text-sm sm:text-base font-bold text-white tracking-tight line-clamp-2 leading-snug group-hover:text-red-400 transition-colors mt-1 min-h-[40px]">
+          <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight line-clamp-1 group-hover:text-red-400 transition-colors leading-snug" title={movie.title}>
             {movie.title}
           </h4>
         </div>
 
-        {/* Action Row - Strictly Aligned Across Cards */}
-        <div className="flex items-center justify-between pt-3 border-t border-white/[0.08] mt-3">
-          <span className="bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide text-zinc-300 border border-white/[0.08] truncate max-w-[100px]">
-            {movie.genre || 'Action'}
+        <div className="flex items-center justify-between text-[10px] text-zinc-400 font-medium pt-1 mt-1 border-t border-white/[0.06]">
+          <span className="text-[#E50914] font-semibold truncate max-w-[60px]" title={movie.vj_name || 'VJ Junior'}>
+            {movie.vj_name || 'VJ Junior'}
           </span>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={(e) => {
-                if (onPlay) {
-                  e.stopPropagation();
-                  onPlay();
-                }
-              }}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 shadow-md shadow-red-950/40 hover:shadow-red-700/30 cursor-pointer"
-            >
-              <Play className="w-3 h-3 fill-current" />
-              <span>Watch</span>
-            </button>
-          </div>
+          <span className="font-mono text-zinc-500 text-[10px]">{movie.release_year || new Date().getFullYear()}</span>
         </div>
       </div>
     </div>

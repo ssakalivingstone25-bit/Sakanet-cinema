@@ -150,18 +150,6 @@ export const EnhancedMovieGrid: React.FC<EnhancedMovieGridProps> = ({
                     </>
                   )}
                 </button>
-
-                <button
-                  onClick={() => downloadEngine.triggerDownload(movie)}
-                  className={`p-1.5 rounded-lg border transition-all ${
-                    downloadItem?.status === 'completed'
-                      ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-400'
-                      : 'bg-zinc-800/60 border-white/10 text-zinc-300 hover:border-white/20'
-                  }`}
-                  title="Download for offline"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                </button>
               </div>
             </div>
           </div>

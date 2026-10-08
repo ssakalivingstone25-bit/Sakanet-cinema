@@ -12,7 +12,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { DownloadItem, Movie, UserProfile } from '../types';
-import { downloadEngine } from '../services/downloadEngine';
+import { downloadEngine, getOriginalMovieFilename } from '../services/downloadEngine';
 import { storageService } from '../services/storageService';
 
 interface OfflineDownloadsViewProps {
@@ -66,13 +66,14 @@ export const OfflineDownloadsView: React.FC<OfflineDownloadsViewProps> = React.m
   };
 
   const handleReDownloadToPhone = (item: DownloadItem) => {
+    const movie = movies.find((m) => m.id === item.movie_id);
+    const safeFilename = movie ? getOriginalMovieFilename(movie) : `${item.movie_title.replace(/[/\\?%*:|"<>]/g, '_')}.mp4`;
     if (item.blob_url) {
       downloadEngine.triggerDirectDeviceDownload(
         item.blob_url,
-        `${item.movie_title.replace(/\s+/g, '_')}.mp4`
+        safeFilename
       );
     } else {
-      const movie = movies.find((m) => m.id === item.movie_id);
       if (movie) {
         downloadEngine.triggerDownload(movie);
       }

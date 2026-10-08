@@ -182,6 +182,15 @@ db.exec(`
     genres TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS contact_messages (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    subject TEXT,
+    message TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Add uploaded_at, video_url, poster_url, original_filename columns if database already existed without them
@@ -1178,6 +1187,202 @@ app.post('/api/vjs', (req: Request, res: Response) => {
     console.error('Save VJ error:', error);
     res.status(500).json({ error: 'Failed to save VJ profile' });
   }
+});
+
+// Contact Us API (Persists inquiries in SQLite)
+app.post('/api/contact', (req: Request, res: Response) => {
+  try {
+    const { name, email, subject, message } = req.body || {};
+    if (!name || !email || !message) {
+      return res.status(400).json({ error: 'Name, email, and message are required' });
+    }
+
+    const id = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    db.prepare(
+      `INSERT INTO contact_messages (id, name, email, subject, message)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(id, String(name).trim(), String(email).trim(), String(subject || 'General Inquiry').trim(), String(message).trim());
+
+    console.log(`[Contact Form] New message from ${name} (${email}): ${subject}`);
+    res.status(201).json({
+      success: true,
+      message: 'Your inquiry has been received. Our team will get back to you shortly.',
+    });
+  } catch (error) {
+    console.error('Contact API error:', error);
+    res.status(500).json({ error: 'Failed to save contact message' });
+  }
+});
+
+app.get('/api/contact', (_req: Request, res: Response) => {
+  try {
+    const messages = db.prepare('SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 50').all();
+    res.json(messages);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch contact messages' });
+  }
+});
+
+// Standalone Static HTML Policy Pages for Google AdSense Reviewers & Bots
+const renderPolicyLayout = (title: string, bodyContent: string) => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title} - Sakanet Cinema</title>
+  <meta name="description" content="${title} for Sakanet Cinema - Ugandan VJ Streaming Platform.">
+  <link rel="icon" type="image/png" href="/logo.png">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #09090b; color: #d4d4d8; margin: 0; padding: 0; line-height: 1.6; }
+    header { background-color: #121319; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: #fff; font-weight: 800; font-size: 20px; }
+    .brand img { height: 38px; width: auto; }
+    .container { max-width: 860px; margin: 40px auto; padding: 0 20px; }
+    .card { background-color: #121319; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    h1 { color: #ffffff; font-size: 28px; margin-top: 0; font-weight: 800; }
+    h2, h3 { color: #ffffff; margin-top: 28px; font-weight: 700; }
+    p, li { font-size: 14px; color: #a1a1aa; }
+    a { color: #ef4444; text-decoration: underline; }
+    a:hover { color: #f87171; }
+    .box { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin: 20px 0; font-size: 13px; }
+    .btn-home { display: inline-block; background: #dc2626; color: white; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; text-decoration: none; transition: background 0.2s; }
+    .btn-home:hover { background: #b91c1c; color: white; }
+    footer { border-top: 1px solid rgba(255,255,255,0.1); text-align: center; padding: 24px; font-size: 12px; color: #71717a; margin-top: 60px; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/" class="brand">
+      <img src="/logo.png" alt="Sakanet Cinema">
+      <span>Sakanet Cinema</span>
+    </a>
+    <a href="/" class="btn-home">← Open App</a>
+  </header>
+  <div class="container">
+    <div class="card">
+      ${bodyContent}
+    </div>
+  </div>
+  <footer>
+    <p>© 2026 Sakanet Cinema. All rights reserved. Kampala, Uganda.</p>
+    <p>Google AdSense Verified Publisher: pub-4740792527987743</p>
+  </footer>
+</body>
+</html>
+`;
+
+app.get(['/privacy', '/privacy-policy'], (_req: Request, res: Response) => {
+  const content = `
+    <h1>Privacy Policy for Sakanet Cinema</h1>
+    <p><strong>Effective Date:</strong> October 8, 2026 · <strong>Last Updated:</strong> October 8, 2026</p>
+    <p>At <strong>Sakanet Cinema</strong>, accessible from this domain, one of our main priorities is the privacy of our visitors. This Privacy Policy document outlines the types of information that is collected and recorded by Sakanet Cinema and how we use it.</p>
+    
+    <h2>1. Google AdSense &amp; Third-Party Advertising (Critical Disclosure)</h2>
+    <p>We partner with <strong>Google AdSense</strong> (Publisher ID: <code>pub-4740792527987743</code>) to serve advertisements when you visit our website. Google, as a third-party vendor, uses cookies to serve ads on Sakanet Cinema.</p>
+    <div class="box">
+      <strong>Google DART Cookie Disclosures:</strong>
+      <ul>
+        <li>Google's use of advertising cookies enables it and its partners to serve ads to our users based on their visit to Sakanet Cinema and/or other sites on the Internet.</li>
+        <li>Users may opt out of personalized advertising by visiting Google's Ads Settings at <a href="https://adssettings.google.com" target="_blank" rel="noopener">adssettings.google.com</a>.</li>
+        <li>You may also opt out of third-party advertising cookies by visiting the Network Advertising Initiative opt-out page at <a href="https://www.aboutads.info/choices/" target="_blank" rel="noopener">www.aboutads.info/choices</a>.</li>
+      </ul>
+    </div>
+
+    <h2>2. Information We Collect</h2>
+    <p>We collect information to deliver our cinema streaming service:</p>
+    <ul>
+      <li><strong>Account Details:</strong> Name and email address when authenticating via Google OAuth sign-in.</li>
+      <li><strong>Streaming Data:</strong> Watchlist, movie ratings, reviews, and progress timestamps.</li>
+      <li><strong>Log Files:</strong> IP addresses, browser types, Internet Service Providers (ISPs), date/time stamps, referring pages, and click data.</li>
+    </ul>
+
+    <h2>3. Cookies and Web Beacons</h2>
+    <p>Like any modern web application, Sakanet Cinema uses cookies to store visitor preferences and enhance user sessions. These cookies are never sold to third parties.</p>
+
+    <h2>4. GDPR, CCPA &amp; Uganda Data Protection Compliance</h2>
+    <p>Under the General Data Protection Regulation (GDPR), California Consumer Privacy Act (CCPA), and the Uganda Data Protection and Privacy Act 2019, users have the right to request access, correction, or deletion of their personal information. To submit a request, contact our Data Protection Officer at <a href="mailto:ssakalivingstone25@gmail.com">ssakalivingstone25@gmail.com</a>.</p>
+
+    <h2>5. Contact Information</h2>
+    <p>For any privacy-related questions, please contact:</p>
+    <p><strong>Livingstone Ssaka</strong><br>Email: <a href="mailto:ssakalivingstone25@gmail.com">ssakalivingstone25@gmail.com</a><br>Kampala, Uganda</p>
+  `;
+  res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+  res.send(renderPolicyLayout('Privacy Policy', content));
+});
+
+app.get(['/terms', '/terms-of-service'], (_req: Request, res: Response) => {
+  const content = `
+    <h1>Terms of Service</h1>
+    <p><strong>Effective Date:</strong> October 8, 2026 · Kampala, Uganda</p>
+    <p>Welcome to <strong>Sakanet Cinema</strong>. By accessing our streaming and offline playback services, you agree to comply with and be bound by the following Terms of Service.</p>
+    
+    <h2>1. Service Description &amp; Ugandan VJ Culture</h2>
+    <p>Sakanet Cinema delivers on-demand streaming and chunk-based offline caching for movies translated and narrated by prominent Ugandan Video Jockeys (VJs). The VJ translation commentary is an authentic cultural performance tradition originating in Kampala, Uganda.</p>
+
+    <h2>2. User Obligations</h2>
+    <p>Users agree to use Sakanet Cinema for lawful, non-commercial personal entertainment purposes. You agree not to attempt to breach platform security, reverse engineer streaming protocols, or scrape catalog data.</p>
+
+    <h2>3. Intellectual Property &amp; Copyright Inquiries (DMCA)</h2>
+    <p>Sakanet Cinema respects the intellectual property rights of copyright holders. If you believe any content on our platform infringes upon your copyright, please submit a formal notification with evidence to <a href="mailto:ssakalivingstone25@gmail.com">ssakalivingstone25@gmail.com</a>.</p>
+
+    <h2>4. Disclaimer &amp; Limitation of Liability</h2>
+    <p>Sakanet Cinema is provided "AS IS" without warranties of uninterrupted service. Sakanet Cinema shall not be liable for any indirect, consequential, or punitive damages arising out of your access to the service.</p>
+
+    <h2>5. Governing Law</h2>
+    <p>These terms shall be governed by and construed in accordance with the laws of the Republic of Uganda.</p>
+  `;
+  res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+  res.send(renderPolicyLayout('Terms of Service', content));
+});
+
+app.get(['/about', '/about-us'], (_req: Request, res: Response) => {
+  const content = `
+    <h1>About Sakanet Cinema</h1>
+    <p><strong>Pioneering Bandwidth-Resilient VJ Streaming in East Africa</strong></p>
+    
+    <div class="box">
+      <strong>Built by Livingstone Ssaka</strong><br>
+      Software Engineer &amp; Cinema Enthusiast · Kampala, Uganda<br>
+      Contact: <a href="mailto:ssakalivingstone25@gmail.com">ssakalivingstone25@gmail.com</a>
+    </div>
+
+    <h2>Who Built Sakanet Cinema &amp; Why?</h2>
+    <p>Sakanet Cinema was created by <strong>Livingstone Ssaka</strong> in Kampala, Uganda, to celebrate and preserve the unique East African cultural phenomenon of <strong>Video Jockey (VJ) cinema</strong> while solving Africa's real connectivity challenges.</p>
+    
+    <p>In Uganda, millions of viewers enjoy foreign action, drama, and comedy blockbusters brought to life by legendary VJs like VJ Junior, VJ Jingo, VJ Ice P, and VJ Mark. These translators do far more than subtitle—they narrate, add humor, and translate context directly into Luganda and indigenous dialects.</p>
+
+    <h2>Core Innovations of Sakanet Cinema</h2>
+    <ul>
+      <li><strong>Chunk-Based Offline Storage:</strong> Movies are cached chunk-by-chunk onto device storage, allowing smooth offline viewing without internet.</li>
+      <li><strong>Real-Time Data Metering:</strong> Live byte tracking prevents unexpected mobile data bundle depletion.</li>
+      <li><strong>Community Ratings:</strong> Real verified user reviews and ratings celebrating top VJ performances.</li>
+    </ul>
+  `;
+  res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+  res.send(renderPolicyLayout('About Us', content));
+});
+
+app.get(['/contact', '/contact-us'], (_req: Request, res: Response) => {
+  const content = `
+    <h1>Contact Sakanet Cinema</h1>
+    <p>We are always eager to hear from our viewers, creators, and advertising partners.</p>
+
+    <div class="box">
+      <strong>Direct Contact Details:</strong><br><br>
+      <strong>Founder &amp; Engineering Lead:</strong> Livingstone Ssaka<br>
+      <strong>Primary Email:</strong> <a href="mailto:ssakalivingstone25@gmail.com">ssakalivingstone25@gmail.com</a><br>
+      <strong>Headquarters:</strong> Kampala Central, Uganda<br>
+      <strong>AdSense Publisher ID:</strong> <code>pub-4740792527987743</code><br>
+      <strong>Expected Response Time:</strong> Within 24 hours
+    </div>
+
+    <h2>Feedback &amp; Business Inquiries</h2>
+    <p>For partnership requests, advertising proposals, DMCA copyright notices, or technical feedback, please email our support team directly at <a href="mailto:ssakalivingstone25@gmail.com">ssakalivingstone25@gmail.com</a> or use the in-app Contact Form available inside the platform.</p>
+  `;
+  res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+  res.send(renderPolicyLayout('Contact Us', content));
 });
 
 // 5. Mount Vite Middlewares in Dev or Serve Dist in Prod

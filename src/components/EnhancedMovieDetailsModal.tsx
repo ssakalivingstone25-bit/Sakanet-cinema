@@ -87,15 +87,6 @@ export const EnhancedMovieDetailsModal: React.FC<EnhancedMovieDetailsModalProps>
                 <Play className="w-4 h-4 fill-current" />
                 <span>Play Now</span>
               </button>
-
-              {/* Download Button - Full Variant */}
-              <DownloadButton
-                downloadItem={downloadItem}
-                onStartDownload={() => {/* handled by parent */}}
-                onPauseResume={() => {/* handled by parent */}}
-                variant="full"
-                showNotification={true}
-              />
             </div>
 
             {/* Secondary Actions */}
